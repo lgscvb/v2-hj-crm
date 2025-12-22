@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { db, crm, line, reports, settings, legalLetter } from '../services/api'
+import { db, crm, line, reports, settings, legalLetter, billing, renewal, contract } from '../services/api'
 import useStore from '../store/useStore'
 
 // ============================================================================
@@ -179,6 +179,258 @@ export function useUndoPayment() {
     },
     onError: (error) => {
       addNotification({ type: 'error', message: `撤銷失敗: ${error.message}` })
+    }
+  })
+}
+
+// ============================================================================
+// Billing DDD Hooks (新版帳務領域服務)
+// ============================================================================
+
+export function useBillingRecordPayment() {
+  const queryClient = useQueryClient()
+  const addNotification = useStore((state) => state.addNotification)
+
+  return useMutation({
+    mutationFn: ({ paymentId, paymentMethod, reference, paidAt }) =>
+      billing.recordPayment(paymentId, paymentMethod, reference, paidAt),
+    onSuccess: (data) => {
+      if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ['payments-due'] })
+        queryClient.invalidateQueries({ queryKey: ['overdue'] })
+        queryClient.invalidateQueries({ queryKey: ['payments-history'] })
+        queryClient.invalidateQueries({ queryKey: ['branch-revenue'] })
+        addNotification({ type: 'success', message: '繳費記錄成功' })
+      } else {
+        addNotification({ type: 'error', message: data.message || '記錄失敗' })
+      }
+    },
+    onError: (error) => {
+      addNotification({ type: 'error', message: `記錄失敗: ${error.message}` })
+    }
+  })
+}
+
+export function useBillingUndoPayment() {
+  const queryClient = useQueryClient()
+  const addNotification = useStore((state) => state.addNotification)
+
+  return useMutation({
+    mutationFn: ({ paymentId, reason }) =>
+      billing.undoPayment(paymentId, reason),
+    onSuccess: (data) => {
+      if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ['payments-due'] })
+        queryClient.invalidateQueries({ queryKey: ['overdue'] })
+        queryClient.invalidateQueries({ queryKey: ['payments-history'] })
+        queryClient.invalidateQueries({ queryKey: ['branch-revenue'] })
+        addNotification({ type: 'success', message: '繳費已撤銷' })
+      } else {
+        addNotification({ type: 'error', message: data.message || '撤銷失敗' })
+      }
+    },
+    onError: (error) => {
+      addNotification({ type: 'error', message: `撤銷失敗: ${error.message}` })
+    }
+  })
+}
+
+export function useBillingRequestWaive() {
+  const queryClient = useQueryClient()
+  const addNotification = useStore((state) => state.addNotification)
+
+  return useMutation({
+    mutationFn: ({ paymentId, reason, requestedBy }) =>
+      billing.requestWaive(paymentId, reason, requestedBy),
+    onSuccess: (data) => {
+      if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ['payments-due'] })
+        queryClient.invalidateQueries({ queryKey: ['overdue'] })
+        queryClient.invalidateQueries({ queryKey: ['waive-requests'] })
+        addNotification({ type: 'success', message: '免收申請已送出' })
+      } else {
+        addNotification({ type: 'error', message: data.message || '申請失敗' })
+      }
+    },
+    onError: (error) => {
+      addNotification({ type: 'error', message: `申請失敗: ${error.message}` })
+    }
+  })
+}
+
+export function useBillingSendReminder() {
+  const queryClient = useQueryClient()
+  const addNotification = useStore((state) => state.addNotification)
+
+  return useMutation({
+    mutationFn: ({ paymentId, channel }) =>
+      billing.sendReminder(paymentId, channel),
+    onSuccess: (data) => {
+      if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ['payments-due'] })
+        queryClient.invalidateQueries({ queryKey: ['overdue'] })
+        addNotification({ type: 'success', message: '催繳通知已發送' })
+      } else {
+        addNotification({ type: 'error', message: data.message || '發送失敗' })
+      }
+    },
+    onError: (error) => {
+      addNotification({ type: 'error', message: `發送失敗: ${error.message}` })
+    }
+  })
+}
+
+export function useBillingBatchRemind() {
+  const queryClient = useQueryClient()
+  const addNotification = useStore((state) => state.addNotification)
+
+  return useMutation({
+    mutationFn: ({ paymentIds, channel }) =>
+      billing.batchRemind(paymentIds, channel),
+    onSuccess: (data) => {
+      if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ['payments-due'] })
+        queryClient.invalidateQueries({ queryKey: ['overdue'] })
+        addNotification({
+          type: 'success',
+          message: `批次催繳完成：成功 ${data.sent_count || 0} 筆`
+        })
+      } else {
+        addNotification({ type: 'error', message: data.message || '批次催繳失敗' })
+      }
+    },
+    onError: (error) => {
+      addNotification({ type: 'error', message: `批次催繳失敗: ${error.message}` })
+    }
+  })
+}
+
+// ============================================================================
+// Renewal DDD Hooks (新版續約領域服務)
+// ============================================================================
+
+export function useRenewalCases(params = {}) {
+  const selectedBranch = useStore((state) => state.selectedBranch)
+
+  return useQuery({
+    queryKey: ['renewal-cases', params, selectedBranch],
+    queryFn: async () => {
+      const data = await renewal.listCases(selectedBranch, params.status, params.limit)
+      return data.success ? data.cases : []
+    }
+  })
+}
+
+export function useRenewalStart() {
+  const queryClient = useQueryClient()
+  const addNotification = useStore((state) => state.addNotification)
+
+  return useMutation({
+    mutationFn: ({ contractId }) => renewal.start(contractId),
+    onSuccess: (data) => {
+      if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ['renewal-cases'] })
+        queryClient.invalidateQueries({ queryKey: ['renewals'] })
+        addNotification({ type: 'success', message: '續約流程已啟動' })
+      } else {
+        addNotification({ type: 'error', message: data.message || '啟動失敗' })
+      }
+    },
+    onError: (error) => {
+      addNotification({ type: 'error', message: `啟動失敗: ${error.message}` })
+    }
+  })
+}
+
+export function useRenewalSendNotification() {
+  const queryClient = useQueryClient()
+  const addNotification = useStore((state) => state.addNotification)
+
+  return useMutation({
+    mutationFn: ({ renewalCaseId, channel }) =>
+      renewal.sendNotification(renewalCaseId, channel),
+    onSuccess: (data) => {
+      if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ['renewal-cases'] })
+        addNotification({ type: 'success', message: '續約通知已發送' })
+      } else {
+        addNotification({ type: 'error', message: data.message || '發送失敗' })
+      }
+    },
+    onError: (error) => {
+      addNotification({ type: 'error', message: `發送失敗: ${error.message}` })
+    }
+  })
+}
+
+export function useRenewalConfirmIntent() {
+  const queryClient = useQueryClient()
+  const addNotification = useStore((state) => state.addNotification)
+
+  return useMutation({
+    mutationFn: ({ renewalCaseId, intent, newEndDate, newMonthlyRent, notes }) =>
+      renewal.confirmIntent(renewalCaseId, intent, newEndDate, newMonthlyRent, notes),
+    onSuccess: (data) => {
+      if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ['renewal-cases'] })
+        queryClient.invalidateQueries({ queryKey: ['contracts'] })
+        const intentText = data.intent === 'renew' ? '續約' : data.intent === 'terminate' ? '退租' : '待定'
+        addNotification({ type: 'success', message: `已確認${intentText}意向` })
+      } else {
+        addNotification({ type: 'error', message: data.message || '確認失敗' })
+      }
+    },
+    onError: (error) => {
+      addNotification({ type: 'error', message: `確認失敗: ${error.message}` })
+    }
+  })
+}
+
+export function useRenewalComplete() {
+  const queryClient = useQueryClient()
+  const addNotification = useStore((state) => state.addNotification)
+
+  return useMutation({
+    mutationFn: ({ renewalCaseId }) => renewal.complete(renewalCaseId),
+    onSuccess: (data) => {
+      if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ['renewal-cases'] })
+        queryClient.invalidateQueries({ queryKey: ['contracts'] })
+        queryClient.invalidateQueries({ queryKey: ['renewals'] })
+        addNotification({ type: 'success', message: '續約流程已完成' })
+      } else {
+        addNotification({ type: 'error', message: data.message || '完成失敗' })
+      }
+    },
+    onError: (error) => {
+      addNotification({ type: 'error', message: `完成失敗: ${error.message}` })
+    }
+  })
+}
+
+// ============================================================================
+// Contract DDD Hooks (合約領域服務)
+// ============================================================================
+
+export function useContractTerminate() {
+  const queryClient = useQueryClient()
+  const addNotification = useStore((state) => state.addNotification)
+
+  return useMutation({
+    mutationFn: ({ contractId, reason, terminateDate }) =>
+      contract.terminate(contractId, reason, terminateDate),
+    onSuccess: (data) => {
+      if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ['contracts'] })
+        queryClient.invalidateQueries({ queryKey: ['contract'] })
+        queryClient.invalidateQueries({ queryKey: ['renewals'] })
+        addNotification({ type: 'success', message: '合約已終止' })
+      } else {
+        addNotification({ type: 'error', message: data.message || '終止失敗' })
+      }
+    },
+    onError: (error) => {
+      addNotification({ type: 'error', message: `終止失敗: ${error.message}` })
     }
   })
 }

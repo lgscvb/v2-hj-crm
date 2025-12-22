@@ -481,6 +481,154 @@ export const crm = {
 }
 
 // ============================================================================
+// Billing Tools (DDD 領域服務)
+// ============================================================================
+
+export const billing = {
+  // 記錄繳費
+  async recordPayment(paymentId, paymentMethod, reference, paidAt = null) {
+    return callTool('billing_record_payment', {
+      payment_id: paymentId,
+      payment_method: paymentMethod,
+      reference,
+      paid_at: paidAt
+    })
+  },
+
+  // 撤銷繳費
+  async undoPayment(paymentId, reason) {
+    return callTool('billing_undo_payment', {
+      payment_id: paymentId,
+      reason
+    })
+  },
+
+  // 申請免收
+  async requestWaive(paymentId, reason, requestedBy = null) {
+    return callTool('billing_request_waive', {
+      payment_id: paymentId,
+      reason,
+      requested_by: requestedBy
+    })
+  },
+
+  // 核准免收
+  async approveWaive(waiveRequestId, approvedBy, notes = null) {
+    return callTool('billing_approve_waive', {
+      waive_request_id: waiveRequestId,
+      approved_by: approvedBy,
+      notes
+    })
+  },
+
+  // 駁回免收
+  async rejectWaive(waiveRequestId, rejectedBy, reason) {
+    return callTool('billing_reject_waive', {
+      waive_request_id: waiveRequestId,
+      rejected_by: rejectedBy,
+      reason
+    })
+  },
+
+  // 發送催繳提醒
+  async sendReminder(paymentId, channel = 'line') {
+    return callTool('billing_send_reminder', {
+      payment_id: paymentId,
+      channel
+    })
+  },
+
+  // 批次催繳
+  async batchRemind(paymentIds, channel = 'line') {
+    return callTool('billing_batch_remind', {
+      payment_ids: paymentIds,
+      channel
+    })
+  }
+}
+
+// ============================================================================
+// Renewal Tools (DDD 領域服務)
+// ============================================================================
+
+export const renewal = {
+  // 開始續約流程
+  async start(contractId) {
+    return callTool('renewal_start', { contract_id: contractId })
+  },
+
+  // 發送續約通知
+  async sendNotification(renewalCaseId, channel = 'line') {
+    return callTool('renewal_send_notification', {
+      renewal_case_id: renewalCaseId,
+      channel
+    })
+  },
+
+  // 確認續約意向
+  async confirmIntent(renewalCaseId, intent, newEndDate = null, newMonthlyRent = null, notes = null) {
+    return callTool('renewal_confirm_intent', {
+      renewal_case_id: renewalCaseId,
+      intent,
+      new_end_date: newEndDate,
+      new_monthly_rent: newMonthlyRent,
+      notes
+    })
+  },
+
+  // 記錄續約費用
+  async recordPayment(renewalCaseId, paymentMethod, reference = null) {
+    return callTool('renewal_record_payment_v2', {
+      renewal_case_id: renewalCaseId,
+      payment_method: paymentMethod,
+      reference
+    })
+  },
+
+  // 完成續約
+  async complete(renewalCaseId) {
+    return callTool('renewal_complete', { renewal_case_id: renewalCaseId })
+  },
+
+  // 取消續約
+  async cancel(renewalCaseId, reason) {
+    return callTool('renewal_cancel', {
+      renewal_case_id: renewalCaseId,
+      reason
+    })
+  },
+
+  // 取得續約案例詳情
+  async getCase(renewalCaseId) {
+    return callTool('renewal_get_case', { renewal_case_id: renewalCaseId })
+  },
+
+  // 列出續約案例
+  async listCases(branchId = null, status = null, limit = 50) {
+    return callTool('renewal_list_cases', {
+      branch_id: branchId,
+      status,
+      limit
+    })
+  }
+}
+
+// ============================================================================
+// Contract Tools (DDD 領域服務)
+// ============================================================================
+
+export const contract = {
+  // 終止合約
+  async terminate(contractId, reason, terminateDate = null) {
+    return callTool('contract_terminate', {
+      contract_id: contractId,
+      reason,
+      terminate_date: terminateDate
+    })
+  }
+}
+
+// ============================================================================
 // LINE Tools
 // ============================================================================
 

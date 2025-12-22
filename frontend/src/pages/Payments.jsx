@@ -1,6 +1,15 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { usePaymentsDue, useOverdueDetails, usePaymentsHistory, useRecordPayment, useUndoPayment, useSendPaymentReminder } from '../hooks/useApi'
+import {
+  usePaymentsDue,
+  useOverdueDetails,
+  usePaymentsHistory,
+  // DDD Billing Hooks
+  useBillingRecordPayment,
+  useBillingUndoPayment,
+  useBillingRequestWaive,
+  useBillingSendReminder
+} from '../hooks/useApi'
 import DataTable from '../components/DataTable'
 import Modal from '../components/Modal'
 import Badge, { StatusBadge } from '../components/Badge'
@@ -122,9 +131,12 @@ export default function Payments() {
   const { data: paymentsDue, isLoading: dueLoading, refetch: refetchDue } = usePaymentsDue()
   const { data: overdueList, isLoading: overdueLoading, refetch: refetchOverdue } = useOverdueDetails()
   const { data: paidList, isLoading: paidLoading, refetch: refetchPaid } = usePaymentsHistory()
-  const recordPayment = useRecordPayment()
-  const undoPayment = useUndoPayment()
-  const sendReminder = useSendPaymentReminder()
+
+  // 使用 DDD Billing Hooks
+  const recordPayment = useBillingRecordPayment()
+  const undoPayment = useBillingUndoPayment()
+  const requestWaive = useBillingRequestWaive()
+  const sendReminder = useBillingSendReminder()
 
   const handleRecordPayment = async () => {
     if (!selectedPayment) return
@@ -154,13 +166,15 @@ export default function Payments() {
 
   const handleSendReminder = async () => {
     if (!selectedPayment) return
+    // 使用 DDD billing_send_reminder 工具
     await sendReminder.mutateAsync({
-      customerId: selectedPayment.customer_id,
-      amount: selectedPayment.total_due || selectedPayment.amount,
-      dueDate: selectedPayment.due_date
+      paymentId: selectedPayment.id,
+      channel: 'line'
     })
     setShowReminderModal(false)
     setSelectedPayment(null)
+    refetchDue()
+    refetchOverdue()
   }
 
   const handleUndoPayment = async () => {
@@ -196,14 +210,14 @@ export default function Payments() {
     }
   }
 
-  // 標記為免收
+  // 標記為免收（使用 DDD billing_request_waive 工具）
   const handleWaivePayment = async () => {
     if (!waivingPayment) return
     setWaiveLoading(true)
     try {
-      await api.patch(`/api/db/payments?id=eq.${waivingPayment.id}`, {
-        payment_status: 'waived',
-        notes: waiveNotes || '免收'
+      await requestWaive.mutateAsync({
+        paymentId: waivingPayment.id,
+        reason: waiveNotes || '免收'
       })
       setShowWaiveModal(false)
       setWaivingPayment(null)
@@ -213,8 +227,8 @@ export default function Payments() {
       refetchOverdue()
       refetchPaid()
     } catch (error) {
-      console.error('免收標記失敗:', error)
-      alert('免收標記失敗：' + (error.response?.data?.message || error.message))
+      console.error('免收申請失敗:', error)
+      alert('免收申請失敗：' + (error.response?.data?.message || error.message))
     } finally {
       setWaiveLoading(false)
     }
