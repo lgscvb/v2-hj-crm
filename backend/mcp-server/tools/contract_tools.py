@@ -550,3 +550,171 @@ async def contract_preview(
     except Exception as e:
         logger.error(f"預覽合約失敗: {e}")
         raise Exception(f"預覽合約失敗: {e}")
+
+
+# ============================================================================
+# 合約終止工具（SSD: contract_terminate）
+# ============================================================================
+
+async def contract_terminate(
+    contract_id: int,
+    reason: str,
+    effective_date: str,
+    terminated_by: str = None
+) -> Dict[str, Any]:
+    """
+    終止合約（SSD: contract_terminate）
+
+    將合約標記為 terminated，未來的待繳款標記為 cancelled（而非刪除）。
+
+    Args:
+        contract_id: 合約ID
+        reason: 終止原因（必填）
+        effective_date: 生效日期 (YYYY-MM-DD)
+        terminated_by: 終止人
+
+    Returns:
+        終止結果
+    """
+    import httpx
+    from datetime import datetime
+
+    if not reason or not reason.strip():
+        return {
+            "success": False,
+            "error": "必須提供終止原因",
+            "code": "INVALID_PARAMS"
+        }
+
+    # 1. 取得合約
+    try:
+        contracts = await postgrest_get("contracts", {"id": f"eq.{contract_id}"})
+        if not contracts:
+            return {"success": False, "error": "找不到合約", "code": "NOT_FOUND"}
+
+        contract = contracts[0]
+    except Exception as e:
+        logger.error(f"contract_terminate - 取得合約失敗: {e}")
+        raise
+
+    # 2. 驗證狀態
+    if contract.get("status") not in ["active", "expired"]:
+        return {
+            "success": False,
+            "error": f"只有生效中或已到期的合約可以終止，目前狀態: {contract.get('status')}",
+            "code": "INVALID_STATUS"
+        }
+
+    # 3. 更新合約狀態
+    now = datetime.now().isoformat()
+
+    try:
+        url = f"{POSTGREST_URL}/contracts"
+        headers = {
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.patch(
+                url,
+                params={"id": f"eq.{contract_id}"},
+                json={
+                    "status": "terminated",
+                    "notes": f"{contract.get('notes', '')}\n[終止] {now[:10]} - {reason.strip()} (by {terminated_by or 'system'})".strip()
+                },
+                headers=headers,
+                timeout=30.0
+            )
+            response.raise_for_status()
+
+        # 4. 將未來的待繳款標記為 cancelled（不是刪除！）
+        # 只取消 effective_date 之後的 pending 狀態款項
+        cancelled_count = 0
+
+        payments = await postgrest_get("payments", {
+            "contract_id": f"eq.{contract_id}",
+            "payment_status": "eq.pending"
+        })
+
+        for payment in payments:
+            payment_period = payment.get("payment_period", "")
+            # 比較期間（格式：YYYY-MM）
+            if payment_period >= effective_date[:7]:
+                async with httpx.AsyncClient() as client:
+                    await client.patch(
+                        f"{POSTGREST_URL}/payments",
+                        params={"id": f"eq.{payment['id']}"},
+                        json={
+                            "payment_status": "cancelled",
+                            "cancelled_at": now,
+                            "cancel_reason": "合約終止"
+                        },
+                        headers=headers,
+                        timeout=30.0
+                    )
+                    cancelled_count += 1
+
+        # 5. 取消相關的續約案件
+        renewal_cancelled = False
+        try:
+            renewals = await postgrest_get("renewal_cases", {
+                "contract_id": f"eq.{contract_id}",
+                "status": "not.in.(completed,cancelled)"
+            })
+
+            for renewal in renewals:
+                async with httpx.AsyncClient() as client:
+                    await client.patch(
+                        f"{POSTGREST_URL}/renewal_cases",
+                        params={"id": f"eq.{renewal['id']}"},
+                        json={
+                            "status": "cancelled",
+                            "cancelled_at": now,
+                            "cancel_reason": "合約終止"
+                        },
+                        headers=headers,
+                        timeout=30.0
+                    )
+                    renewal_cancelled = True
+        except Exception as renewal_err:
+            logger.warning(f"取消續約案件失敗（不影響終止）: {renewal_err}")
+
+        # 6. 記錄審計日誌
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{POSTGREST_URL}/audit_logs",
+                    json={
+                        "table_name": "contracts",
+                        "record_id": contract_id,
+                        "action": "UPDATE",
+                        "old_data": {"status": contract.get("status")},
+                        "new_data": {
+                            "status": "terminated",
+                            "reason": reason,
+                            "effective_date": effective_date,
+                            "terminated_by": terminated_by
+                        },
+                        "changed_fields": ["status"]
+                    },
+                    headers={"Content-Type": "application/json"},
+                    timeout=30.0
+                )
+        except Exception as audit_err:
+            logger.warning(f"審計日誌記錄失敗: {audit_err}")
+
+        return {
+            "success": True,
+            "message": f"合約 {contract.get('contract_number')} 已終止",
+            "contract_id": contract_id,
+            "contract_number": contract.get("contract_number"),
+            "effective_date": effective_date,
+            "reason": reason,
+            "cancelled_payments_count": cancelled_count,
+            "renewal_cancelled": renewal_cancelled
+        }
+
+    except Exception as e:
+        logger.error(f"contract_terminate error: {e}")
+        raise

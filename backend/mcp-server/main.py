@@ -182,7 +182,31 @@ from tools.invoice_tools import (
 
 from tools.contract_tools import (
     contract_generate_pdf,
-    contract_preview
+    contract_preview,
+    contract_terminate
+)
+
+# DDD Domain Tools - Billing
+from tools.billing_tools import (
+    billing_record_payment,
+    billing_undo_payment,
+    billing_request_waive,
+    billing_approve_waive,
+    billing_reject_waive,
+    billing_send_reminder,
+    billing_batch_remind
+)
+
+# DDD Domain Tools - Renewal (v2 with RenewalCase entity)
+from tools.renewal_tools_v2 import (
+    renewal_start,
+    renewal_send_notification,
+    renewal_confirm_intent,
+    renewal_record_payment as renewal_record_payment_v2,
+    renewal_complete,
+    renewal_cancel,
+    renewal_get_case,
+    renewal_list_cases
 )
 
 from tools.settings_tools import (
@@ -696,6 +720,159 @@ MCP_TOOLS = {
             "contract_id": {"type": "integer", "description": "合約ID", "required": True}
         },
         "handler": contract_preview
+    },
+    "contract_terminate": {
+        "description": "終止合約（將未來繳費標記為 cancelled，不刪除）",
+        "parameters": {
+            "contract_id": {"type": "integer", "description": "合約ID", "required": True},
+            "reason": {"type": "string", "description": "終止原因", "required": True},
+            "effective_date": {"type": "string", "description": "生效日期 (YYYY-MM-DD)", "required": True},
+            "terminated_by": {"type": "string", "description": "操作者", "optional": True}
+        },
+        "handler": contract_terminate
+    },
+
+    # ==========================================================================
+    # DDD Domain Tools - Billing（帳務領域）
+    # ==========================================================================
+    "billing_record_payment": {
+        "description": "記錄繳費（DDD 版本，MVP 嚴格模式：金額必須完全符合）",
+        "parameters": {
+            "payment_id": {"type": "integer", "description": "付款ID", "required": True},
+            "payment_method": {"type": "string", "description": "付款方式 (cash/transfer/credit_card/line_pay)", "required": True},
+            "amount": {"type": "number", "description": "實際收款金額（必須 = 應付金額）", "required": True},
+            "payment_date": {"type": "string", "description": "付款日期 (YYYY-MM-DD)，預設今天", "optional": True},
+            "notes": {"type": "string", "description": "備註", "optional": True}
+        },
+        "handler": billing_record_payment
+    },
+    "billing_undo_payment": {
+        "description": "撤銷繳費記錄（將已付款改回待繳/逾期）",
+        "parameters": {
+            "payment_id": {"type": "integer", "description": "付款ID", "required": True},
+            "reason": {"type": "string", "description": "撤銷原因", "required": True},
+            "undo_by": {"type": "string", "description": "操作者", "optional": True}
+        },
+        "handler": billing_undo_payment
+    },
+    "billing_request_waive": {
+        "description": "申請免收（建立 WaiveRequest，需審批）",
+        "parameters": {
+            "payment_id": {"type": "integer", "description": "付款ID", "required": True},
+            "reason": {"type": "string", "description": "免收原因", "required": True},
+            "requested_by": {"type": "string", "description": "申請人", "required": True},
+            "idempotency_key": {"type": "string", "description": "冪等性 Key（防止重複提交）", "optional": True}
+        },
+        "handler": billing_request_waive
+    },
+    "billing_approve_waive": {
+        "description": "核准免收申請",
+        "parameters": {
+            "request_id": {"type": "integer", "description": "免收申請ID", "required": True},
+            "approved_by": {"type": "string", "description": "審批人", "required": True}
+        },
+        "handler": billing_approve_waive
+    },
+    "billing_reject_waive": {
+        "description": "駁回免收申請",
+        "parameters": {
+            "request_id": {"type": "integer", "description": "免收申請ID", "required": True},
+            "rejected_by": {"type": "string", "description": "審批人", "required": True},
+            "reason": {"type": "string", "description": "駁回原因", "required": True}
+        },
+        "handler": billing_reject_waive
+    },
+    "billing_send_reminder": {
+        "description": "發送催繳提醒（透過 Brain 轉發 LINE）",
+        "parameters": {
+            "payment_id": {"type": "integer", "description": "付款ID", "required": True}
+        },
+        "handler": billing_send_reminder
+    },
+    "billing_batch_remind": {
+        "description": "批量催繳（建立 BatchTask 追蹤）",
+        "parameters": {
+            "payment_ids": {"type": "array", "description": "付款ID列表", "required": True},
+            "created_by": {"type": "string", "description": "操作者", "optional": True}
+        },
+        "handler": billing_batch_remind
+    },
+
+    # ==========================================================================
+    # DDD Domain Tools - Renewal（續約領域，使用獨立 RenewalCase 實體）
+    # ==========================================================================
+    "renewal_start": {
+        "description": "開始續約流程（建立 RenewalCase，預留原座位）",
+        "parameters": {
+            "contract_id": {"type": "integer", "description": "合約ID", "required": True},
+            "created_by": {"type": "string", "description": "操作者", "optional": True}
+        },
+        "handler": renewal_start
+    },
+    "renewal_send_notification": {
+        "description": "發送續約通知（LINE 或 Email）",
+        "parameters": {
+            "renewal_case_id": {"type": "integer", "description": "續約案件ID", "required": True},
+            "channel": {"type": "string", "description": "通知管道 (line/email/both)", "optional": True}
+        },
+        "handler": renewal_send_notification
+    },
+    "renewal_confirm_intent": {
+        "description": "確認續約意願（客戶回覆確認）",
+        "parameters": {
+            "renewal_case_id": {"type": "integer", "description": "續約案件ID", "required": True},
+            "confirmed": {"type": "boolean", "description": "是否確認續約", "required": True},
+            "notes": {"type": "string", "description": "備註", "optional": True}
+        },
+        "handler": renewal_confirm_intent
+    },
+    "renewal_record_payment_v2": {
+        "description": "記錄續約款（更新 RenewalCase 狀態）",
+        "parameters": {
+            "renewal_case_id": {"type": "integer", "description": "續約案件ID", "required": True},
+            "payment_method": {"type": "string", "description": "付款方式", "required": True},
+            "amount": {"type": "number", "description": "金額", "required": True},
+            "notes": {"type": "string", "description": "備註", "optional": True}
+        },
+        "handler": renewal_record_payment_v2
+    },
+    "renewal_complete": {
+        "description": "完成續約（建立新合約，釋放座位預留）",
+        "parameters": {
+            "renewal_case_id": {"type": "integer", "description": "續約案件ID", "required": True},
+            "new_start_date": {"type": "string", "description": "新合約開始日期 (YYYY-MM-DD)", "required": True},
+            "new_end_date": {"type": "string", "description": "新合約結束日期 (YYYY-MM-DD)", "required": True},
+            "new_monthly_rent": {"type": "number", "description": "新月租金（不填則沿用）", "optional": True},
+            "notes": {"type": "string", "description": "備註", "optional": True}
+        },
+        "handler": renewal_complete
+    },
+    "renewal_cancel": {
+        "description": "取消續約（釋放座位預留）",
+        "parameters": {
+            "renewal_case_id": {"type": "integer", "description": "續約案件ID", "required": True},
+            "reason": {"type": "string", "description": "取消原因", "required": True},
+            "cancelled_by": {"type": "string", "description": "操作者", "optional": True}
+        },
+        "handler": renewal_cancel
+    },
+    "renewal_get_case": {
+        "description": "取得續約案件詳情",
+        "parameters": {
+            "renewal_case_id": {"type": "integer", "description": "續約案件ID", "optional": True},
+            "contract_id": {"type": "integer", "description": "合約ID（查詢該合約的續約案件）", "optional": True}
+        },
+        "handler": renewal_get_case
+    },
+    "renewal_list_cases": {
+        "description": "列出續約案件",
+        "parameters": {
+            "branch_id": {"type": "integer", "description": "場館ID", "optional": True},
+            "status": {"type": "string", "description": "狀態篩選 (created/notified/confirmed/paid/invoiced/completed/cancelled)", "optional": True},
+            "days_ahead": {"type": "integer", "description": "未來幾天內到期", "default": 30},
+            "limit": {"type": "integer", "description": "回傳筆數", "default": 50}
+        },
+        "handler": renewal_list_cases
     },
 
     # 系統設定工具
