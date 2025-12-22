@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ floor_plan.name }} 平面圖</title>
+    <style>
+        @page {
+            size: 1365px 1024px;
+            margin: 5px;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            padding: 5px;
+            font-family: 'Noto Sans TC', 'Microsoft JhengHei', 'PingFang TC', sans-serif;
+            font-size: 9px;
+            background: #fff;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 5px;
+            padding-bottom: 5px;
+            border-bottom: 2px solid #2c5530;
+        }
+        .header h1 {
+            margin: 0;
+            color: #2c5530;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .header .subtitle {
+            color: #666;
+            font-size: 10px;
+            margin-top: 2px;
+        }
+        .header .date {
+            color: #999;
+            font-size: 9px;
+            margin-top: 2px;
+        }
+        /* 使用 table 佈局取代 flexbox 以確保 WeasyPrint 相容性 */
+        .main-layout {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .main-layout td {
+            vertical-align: top;
+            padding: 0;
+        }
+        .floor-plan-cell {
+            width: 870px;
+            padding-right: 15px;
+        }
+        .tenant-panel-cell {
+            width: 460px;
+        }
+        .floor-plan {
+            position: relative;
+            width: {{ floor_plan.width }}px;
+            height: {{ floor_plan.height }}px;
+            background-image: url('{{ floor_plan.image_url }}');
+            background-size: {{ floor_plan.width }}px {{ floor_plan.height }}px;
+            background-repeat: no-repeat;
+            background-position: top left;
+            background-color: #fafafa;
+            border: 1px solid #ddd;
+        }
+        .position-box {
+            position: absolute;
+            border: 1px solid #333;
+            font-size: 7px;
+            padding: 1px 2px;
+            text-align: center;
+            overflow: hidden;
+            line-height: 1.1;
+            border-radius: 2px;
+        }
+        .position-box.occupied {
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+        }
+        .position-box.vacant {
+            background: rgba(240, 240, 240, 0.8);
+            color: #999;
+            border-style: dashed;
+        }
+        .pos-num {
+            color: #0066cc;
+            font-weight: bold;
+            margin-right: 1px;
+        }
+        .company {
+            font-size: 6px;
+            display: block;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .legend {
+            margin-top: 5px;
+            text-align: center;
+            font-size: 9px;
+        }
+        .legend-item {
+            display: inline-block;
+            margin-right: 15px;
+        }
+        .legend-box {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 1px solid #333;
+            border-radius: 2px;
+            vertical-align: middle;
+            margin-right: 4px;
+        }
+        .legend-box.occupied {
+            background: #fff;
+        }
+        .legend-box.vacant {
+            background: #f0f0f0;
+            border-style: dashed;
+        }
+        .stats-box {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            padding: 8px;
+            margin-bottom: 8px;
+        }
+        .stats-box h3 {
+            margin: 0 0 6px 0;
+            color: #2c5530;
+            font-size: 11px;
+            border-bottom: 1px solid #2c5530;
+            padding-bottom: 3px;
+        }
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .stats-table td {
+            width: 50%;
+            text-align: center;
+            padding: 4px;
+            background: #fff;
+            border: 1px solid #eee;
+        }
+        .stat-value {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2c5530;
+        }
+        .stat-label {
+            font-size: 8px;
+            color: #666;
+        }
+        .tenant-table-wrapper {
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .tenant-table-header {
+            background: #2c5530;
+            color: #fff;
+            padding: 6px 8px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .tenant-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 8px;
+        }
+        .tenant-table th {
+            background: #f5f5f5;
+            padding: 4px 5px;
+            text-align: left;
+            font-weight: bold;
+            border-bottom: 1px solid #ddd;
+        }
+        .tenant-table td {
+            padding: 3px 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .tenant-table tr:nth-child(even) {
+            background: #fafafa;
+        }
+        .footer {
+            margin-top: 5px;
+            text-align: center;
+            font-size: 8px;
+            color: #999;
+            border-top: 1px solid #eee;
+            padding-top: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ floor_plan.name }} 租戶配置圖</h1>
+        <div class="subtitle">Hour Jungle 商務中心</div>
+        <div class="date">製表日期：{{ output_date[:4] }}年{{ output_date[4:6] }}月{{ output_date[6:8] }}日</div>
+    </div>
+
+    <table class="main-layout">
+        <tr>
+            <td class="floor-plan-cell">
+                <div class="floor-plan">
+                    {% for pos in positions %}
+                    <div class="position-box {% if pos.contract_id %}occupied{% else %}vacant{% endif %}"
+                         style="left: {{ pos.x }}px; top: {{ pos.y }}px; width: {{ pos.width }}px; height: {{ pos.height }}px;">
+                        <span class="pos-num">{{ pos.position_number }}</span>
+                        {% if pos.company_name %}
+                        <span class="company">{{ pos.company_name[:8] }}{% if pos.company_name|length > 8 %}…{% endif %}</span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="legend">
+                    <span class="legend-item">
+                        <span class="legend-box occupied"></span>
+                        <span>已租用</span>
+                    </span>
+                    <span class="legend-item">
+                        <span class="legend-box vacant"></span>
+                        <span>空位</span>
+                    </span>
+                </div>
+            </td>
+
+            {% if include_table %}
+            <td class="tenant-panel-cell">
+                <div class="stats-box">
+                    <h3>空間統計</h3>
+                    <table class="stats-table">
+                        <tr>
+                            <td>
+                                <div class="stat-value">{{ statistics.total_positions }}</div>
+                                <div class="stat-label">總位置數</div>
+                            </td>
+                            <td>
+                                <div class="stat-value">{{ statistics.occupied }}</div>
+                                <div class="stat-label">已租用</div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div class="stat-value">{{ statistics.vacant }}</div>
+                                <div class="stat-label">空位</div>
+                            </td>
+                            <td>
+                                <div class="stat-value">{{ statistics.occupancy_rate }}</div>
+                                <div class="stat-label">出租率</div>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="tenant-table-wrapper">
+                    <div class="tenant-table-header">租戶名冊（國稅局備查）</div>
+                    <table class="tenant-table dual-column">
+                        <thead>
+                            <tr>
+                                <th style="width: 25px;">位置</th>
+                                <th style="width: 50px;">負責人</th>
+                                <th style="width: 115px;">公司名稱</th>
+                                <th style="width: 25px;">位置</th>
+                                <th style="width: 50px;">負責人</th>
+                                <th style="width: 115px;">公司名稱</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set occupied_positions = positions | selectattr('contract_id') | list %}
+                            {% for i in range(0, occupied_positions|length, 2) %}
+                            <tr>
+                                {# 左欄 #}
+                                <td><strong>{{ occupied_positions[i].position_number }}</strong></td>
+                                <td>{{ occupied_positions[i].customer_name or '' }}</td>
+                                <td>{{ (occupied_positions[i].company_name or '')[:12] }}{% if occupied_positions[i].company_name and occupied_positions[i].company_name|length > 12 %}…{% endif %}</td>
+                                {# 右欄 #}
+                                {% if i + 1 < occupied_positions|length %}
+                                <td><strong>{{ occupied_positions[i+1].position_number }}</strong></td>
+                                <td>{{ occupied_positions[i+1].customer_name or '' }}</td>
+                                <td>{{ (occupied_positions[i+1].company_name or '')[:12] }}{% if occupied_positions[i+1].company_name and occupied_positions[i+1].company_name|length > 12 %}…{% endif %}</td>
+                                {% else %}
+                                <td></td>
+                                <td></td>
+                                <td></td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </td>
+            {% endif %}
+        </tr>
+    </table>
+
+    <div class="footer">
+        Hour Jungle 商務中心 © {{ output_date[:4] }} | 此文件由系統自動生成
+    </div>
+</body>
+</html>
