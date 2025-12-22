@@ -568,16 +568,20 @@ export function useTodayBookings() {
     queryKey: ['today-bookings', today],
     queryFn: async () => {
       try {
-        // 查詢今日的預約
-        const response = await fetch(`/api/db/meeting_room_bookings?booking_date=eq.${today}&status=eq.confirmed&order=start_time.asc`)
-        if (!response.ok) throw new Error('Failed to fetch bookings')
-        const bookings = await response.json()
+        // 查詢今日的預約（使用 db.query 確保使用正確的 API baseURL）
+        const bookings = await db.query('meeting_room_bookings', {
+          booking_date: `eq.${today}`,
+          status: 'eq.confirmed',
+          order: 'start_time.asc'
+        })
 
         // 查詢客戶名稱
         if (bookings.length > 0) {
           const customerIds = [...new Set(bookings.map(b => b.customer_id))]
-          const customersRes = await fetch(`/api/db/customers?id=in.(${customerIds.join(',')})&select=id,name,company_name`)
-          const customers = await customersRes.json()
+          const customers = await db.query('customers', {
+            id: `in.(${customerIds.join(',')})`,
+            select: 'id,name,company_name'
+          })
           const customerMap = Object.fromEntries(customers.map(c => [c.id, c]))
 
           return bookings.map(b => ({
