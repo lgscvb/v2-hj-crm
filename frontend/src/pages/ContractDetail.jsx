@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useContractDetail, useRecordPayment, useSendPaymentReminder, useUpdateCustomer } from '../hooks/useApi'
+import { useContractDetail, useBillingRecordPayment, useSendPaymentReminder, useUpdateCustomer } from '../hooks/useApi'
 import { crm } from '../services/api'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { pdf } from '@react-pdf/renderer'
@@ -319,7 +319,7 @@ export default function ContractDetail() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data: result, isLoading, refetch } = useContractDetail(id)
-  const recordPayment = useRecordPayment()
+  const recordPayment = useBillingRecordPayment()
   const sendReminder = useSendPaymentReminder()
   const updateCustomer = useUpdateCustomer()
 
@@ -398,15 +398,24 @@ export default function ContractDetail() {
 
   // 記錄繳費
   const handleRecordPayment = async () => {
-    await recordPayment.mutateAsync({
-      paymentId: selectedPayment.id,
-      paymentMethod: paymentForm.payment_method,
-      reference: paymentForm.reference
-    })
-    setShowPayModal(false)
-    setSelectedPayment(null)
-    setPaymentForm({ payment_method: 'transfer', reference: '' })
-    refetch()
+    try {
+      const result = await recordPayment.mutateAsync({
+        paymentId: selectedPayment.id,
+        paymentMethod: paymentForm.payment_method,
+        amount: selectedPayment.amount,  // 必填：應付金額
+        notes: paymentForm.reference || null,  // 備註（如轉帳後五碼）
+        paymentDate: new Date().toISOString().split('T')[0]
+      })
+
+      if (result?.success) {
+        setShowPayModal(false)
+        setSelectedPayment(null)
+        setPaymentForm({ payment_method: 'transfer', reference: '' })
+        refetch()
+      }
+    } catch (error) {
+      console.error('付費記錄失敗:', error)
+    }
   }
 
   // 發送催繳

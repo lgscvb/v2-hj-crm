@@ -140,28 +140,37 @@ export default function Payments() {
 
   const handleRecordPayment = async () => {
     if (!selectedPayment) return
-    await recordPayment.mutateAsync({
-      paymentId: selectedPayment.id,
-      paymentMethod: paymentForm.payment_method,
-      reference: paymentForm.reference || null,
-      paidAt: paymentForm.paid_at
-    })
 
-    // 保存 payment_id，關閉 Modal 後導航到發票頁面
-    const paymentId = selectedPayment.id
+    try {
+      const result = await recordPayment.mutateAsync({
+        paymentId: selectedPayment.id,
+        paymentMethod: paymentForm.payment_method,
+        amount: selectedPayment.amount,  // 必填：應付金額
+        notes: paymentForm.reference || null,  // 備註（如轉帳後五碼）
+        paymentDate: paymentForm.paid_at
+      })
 
-    setShowPayModal(false)
-    setSelectedPayment(null)
-    setPaymentForm({
-      payment_method: 'transfer',
-      reference: '',
-      paid_at: new Date().toISOString().split('T')[0]
-    })
-    refetchDue()
-    refetchOverdue()
+      // 只有成功時才跳轉到發票頁面
+      if (result?.success) {
+        const paymentId = selectedPayment.id
 
-    // 導航到發票頁面，自動開啟開立發票 Modal
-    navigate(`/invoices?payment_id=${paymentId}`)
+        setShowPayModal(false)
+        setSelectedPayment(null)
+        setPaymentForm({
+          payment_method: 'transfer',
+          reference: '',
+          paid_at: new Date().toISOString().split('T')[0]
+        })
+        refetchDue()
+        refetchOverdue()
+
+        // 導航到發票頁面，自動開啟開立發票 Modal
+        navigate(`/invoices?payment_id=${paymentId}`)
+      }
+    } catch (error) {
+      // 錯誤由 useBillingRecordPayment 的 onError 處理
+      console.error('付費記錄失敗:', error)
+    }
   }
 
   const handleSendReminder = async () => {
