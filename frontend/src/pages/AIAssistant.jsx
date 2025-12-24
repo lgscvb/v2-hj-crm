@@ -553,7 +553,7 @@ export default function AIAssistant() {
       {/* 修正對話 Modal */}
       {showRefinementModal && selectedConversation && (
         <Modal
-          isOpen={showRefinementModal}
+          open={showRefinementModal}
           onClose={() => {
             setShowRefinementModal(false)
             setSelectedConversation(null)
