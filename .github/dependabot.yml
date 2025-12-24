@@ -12,27 +12,17 @@ updates:
       time: "09:00"
       timezone: "Asia/Taipei"
     open-pull-requests-limit: 10
+    rebase-strategy: "auto"
     commit-message:
       prefix: "chore(deps)"
     labels:
       - "dependencies"
       - "frontend"
-    # 自動合併 patch 和 minor 更新
+    # 群組化更新（減少 PR 數量）
     groups:
-      production-dependencies:
+      all-dependencies:
         patterns:
           - "*"
-        exclude-patterns:
-          - "@types/*"
-        update-types:
-          - "minor"
-          - "patch"
-      dev-dependencies:
-        patterns:
-          - "@types/*"
-          - "eslint*"
-          - "vite*"
-          - "@vitejs/*"
         update-types:
           - "minor"
           - "patch"
@@ -46,6 +36,7 @@ updates:
       time: "09:00"
       timezone: "Asia/Taipei"
     open-pull-requests-limit: 10
+    rebase-strategy: "auto"
     commit-message:
       prefix: "chore(deps)"
     labels:
@@ -67,6 +58,7 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "Asia/Taipei"
+    rebase-strategy: "auto"
     commit-message:
       prefix: "chore(docker)"
     labels:
@@ -81,8 +73,13 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "Asia/Taipei"
+    rebase-strategy: "auto"
     commit-message:
       prefix: "chore(ci)"
     labels:
       - "dependencies"
       - "ci"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
