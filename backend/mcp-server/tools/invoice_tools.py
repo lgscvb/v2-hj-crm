@@ -194,7 +194,28 @@ async def invoice_create(
                 data=params,
                 timeout=30.0
             )
-            result = response.json()
+
+            # 記錄原始回應以便除錯
+            raw_text = response.text
+            logger.info(f"發票 API 回應狀態: {response.status_code}")
+            logger.info(f"發票 API 原始回應: {raw_text[:500]}")
+
+            if not raw_text.strip():
+                return {
+                    "success": False,
+                    "message": "發票 API 回傳空回應",
+                    "status_code": response.status_code
+                }
+
+            try:
+                result = response.json()
+            except Exception as json_err:
+                logger.error(f"JSON 解析失敗: {json_err}, 原始內容: {raw_text[:200]}")
+                return {
+                    "success": False,
+                    "message": f"發票 API 回應格式錯誤",
+                    "raw_response": raw_text[:200]
+                }
 
             if result.get("status") == "success" or result.get("code") == "0":
                 invoice_number = result.get("invoice_number") or result.get("data", {}).get("invoice_number")
