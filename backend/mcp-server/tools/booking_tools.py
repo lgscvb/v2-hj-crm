@@ -17,6 +17,12 @@ logger = logging.getLogger(__name__)
 
 POSTGREST_URL = os.getenv("POSTGREST_URL", "http://postgrest:3000")
 
+# 預設 Calendar ID（當會議室沒有設定專屬 Calendar 時使用）
+DEFAULT_MEETING_CALENDAR_ID = os.getenv(
+    "MEETING_CALENDAR_ID",
+    os.getenv("SIGNING_CALENDAR_ID", "primary")  # 共用簽約行事曆
+)
+
 # PostgREST 請求函數（供此模組使用）
 _postgrest_request = None
 
@@ -311,45 +317,49 @@ async def booking_create(
 
         booking = result[0] if isinstance(result, list) else result
 
-        # 6. 建立 Google Calendar 事件（如果有設定）
+        # 6. 建立 Google Calendar 事件
         google_event_id = None
-        if room.get("google_calendar_id"):
-            try:
-                calendar_service = get_calendar_service()
-                check_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-                start_dt = datetime.combine(check_date, datetime.strptime(start_time, "%H:%M").time())
-                end_dt = datetime.combine(check_date, datetime.strptime(end_time, "%H:%M").time())
+        calendar_id = room.get("google_calendar_id") or DEFAULT_MEETING_CALENDAR_ID
+        try:
+            calendar_service = get_calendar_service()
+            check_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            start_dt = datetime.combine(check_date, datetime.strptime(start_time, "%H:%M").time())
+            end_dt = datetime.combine(check_date, datetime.strptime(end_time, "%H:%M").time())
 
-                # 取得場館資訊
-                branches = await postgrest_get("branches", {"id": f"eq.{room['branch_id']}"})
-                branch_name = branches[0]["name"] if branches else ""
+            # 取得場館資訊
+            branches = await postgrest_get("branches", {"id": f"eq.{room['branch_id']}"})
+            branch_name = branches[0]["name"] if branches else ""
 
-                event_title = f"[{booking_number}] {customer.get('company_name') or customer['name']}"
-                event_desc = f"預約人: {customer['name']}\n"
-                if purpose:
-                    event_desc += f"目的: {purpose}\n"
-                if attendees_count:
-                    event_desc += f"人數: {attendees_count}\n"
+            event_title = f"【會議室】{customer.get('company_name') or customer['name']} ({booking_number})"
+            event_desc = f"預約編號: {booking_number}\n"
+            event_desc += f"預約人: {customer['name']}\n"
+            if customer.get('phone'):
+                event_desc += f"電話: {customer['phone']}\n"
+            if purpose:
+                event_desc += f"目的: {purpose}\n"
+            if attendees_count:
+                event_desc += f"人數: {attendees_count}\n"
 
-                cal_result = calendar_service.create_event(
-                    room["google_calendar_id"],
-                    event_title,
-                    start_dt,
-                    end_dt,
-                    description=event_desc,
-                    location=f"{branch_name} {room['name']}"
+            cal_result = calendar_service.create_event(
+                calendar_id,
+                event_title,
+                start_dt,
+                end_dt,
+                description=event_desc,
+                location=f"{branch_name} {room['name']}"
+            )
+
+            if cal_result.get("success"):
+                google_event_id = cal_result["event_id"]
+                # 更新預約記錄
+                await postgrest_patch(
+                    "meeting_room_bookings",
+                    {"id": f"eq.{booking['id']}"},
+                    {"google_event_id": google_event_id}
                 )
-
-                if cal_result.get("success"):
-                    google_event_id = cal_result["event_id"]
-                    # 更新預約記錄
-                    await postgrest_patch(
-                        "meeting_room_bookings",
-                        {"id": f"eq.{booking['id']}"},
-                        {"google_event_id": google_event_id}
-                    )
-            except Exception as e:
-                logger.warning(f"Failed to create calendar event: {e}")
+                logger.info(f"Created calendar event {google_event_id} for booking {booking_number}")
+        except Exception as e:
+            logger.warning(f"Failed to create calendar event: {e}")
 
         return {
             "success": True,
@@ -431,12 +441,10 @@ async def booking_cancel(
         if booking.get("google_event_id"):
             try:
                 rooms = await postgrest_get("meeting_rooms", {"id": f"eq.{booking['meeting_room_id']}"})
-                if rooms and rooms[0].get("google_calendar_id"):
-                    calendar_service = get_calendar_service()
-                    calendar_service.delete_event(
-                        rooms[0]["google_calendar_id"],
-                        booking["google_event_id"]
-                    )
+                calendar_id = (rooms[0].get("google_calendar_id") if rooms else None) or DEFAULT_MEETING_CALENDAR_ID
+                calendar_service = get_calendar_service()
+                calendar_service.delete_event(calendar_id, booking["google_event_id"])
+                logger.info(f"Deleted calendar event for booking {booking['booking_number']}")
             except Exception as e:
                 logger.warning(f"Failed to delete calendar event: {e}")
 
@@ -544,18 +552,19 @@ async def booking_update(
         if time_changed and booking.get("google_event_id"):
             try:
                 rooms = await postgrest_get("meeting_rooms", {"id": f"eq.{booking['meeting_room_id']}"})
-                if rooms and rooms[0].get("google_calendar_id"):
-                    calendar_service = get_calendar_service()
-                    check_date = datetime.strptime(new_date, "%Y-%m-%d").date()
-                    start_dt = datetime.combine(check_date, datetime.strptime(new_start, "%H:%M").time())
-                    end_dt = datetime.combine(check_date, datetime.strptime(new_end, "%H:%M").time())
+                calendar_id = (rooms[0].get("google_calendar_id") if rooms else None) or DEFAULT_MEETING_CALENDAR_ID
+                calendar_service = get_calendar_service()
+                check_date = datetime.strptime(new_date, "%Y-%m-%d").date()
+                start_dt = datetime.combine(check_date, datetime.strptime(new_start, "%H:%M").time())
+                end_dt = datetime.combine(check_date, datetime.strptime(new_end, "%H:%M").time())
 
-                    calendar_service.update_event(
-                        rooms[0]["google_calendar_id"],
-                        booking["google_event_id"],
-                        start_datetime=start_dt,
-                        end_datetime=end_dt
-                    )
+                calendar_service.update_event(
+                    calendar_id,
+                    booking["google_event_id"],
+                    start_datetime=start_dt,
+                    end_datetime=end_dt
+                )
+                logger.info(f"Updated calendar event for booking {booking['booking_number']}")
             except Exception as e:
                 logger.warning(f"Failed to update calendar event: {e}")
 
