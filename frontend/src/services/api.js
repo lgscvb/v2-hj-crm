@@ -858,17 +858,40 @@ export const aiLearning = {
 
   // 取得回饋統計
   async getFeedbackStats(days = 30) {
-    return api.get('/ai/feedback/stats', { params: { days } })
+    try {
+      const data = await api.get('/ai/feedback/stats', { params: { days } })
+      return data || {}
+    } catch (error) {
+      console.warn('getFeedbackStats failed:', error.message)
+      return {}
+    }
   },
 
   // 列出對話記錄
   async getConversations(params = {}) {
-    return api.get('/ai/conversations', { params })
+    try {
+      const data = await api.get('/ai/conversations', { params })
+      // 確保回傳陣列（後端可能回傳 { data: [] } 或直接 []）
+      if (Array.isArray(data)) return data
+      if (Array.isArray(data?.data)) return data.data
+      if (Array.isArray(data?.conversations)) return data.conversations
+      return []
+    } catch (error) {
+      // 端點尚未實作時返回空陣列
+      console.warn('getConversations failed:', error.message)
+      return []
+    }
   },
 
   // 取得訓練統計
   async getTrainingStats() {
-    return api.get('/ai/training/stats')
+    try {
+      const data = await api.get('/ai/training/stats')
+      return data || {}
+    } catch (error) {
+      console.warn('getTrainingStats failed:', error.message)
+      return {}
+    }
   },
 
   // 匯出訓練資料

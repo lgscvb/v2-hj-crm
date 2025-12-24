@@ -207,7 +207,12 @@ export default function AILearning() {
   })
 
   const stats = statsData?.data || statsData || {}
-  const conversations = conversationsData?.data || conversationsData || []
+  // 確保 conversations 永遠是陣列（防止 .map is not a function 錯誤）
+  const conversations = Array.isArray(conversationsData)
+    ? conversationsData
+    : Array.isArray(conversationsData?.data)
+      ? conversationsData.data
+      : []
   const training = trainingData?.data || trainingData || {}
 
   return (
