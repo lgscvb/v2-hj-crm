@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 import os
 
 # 光貿 API 設定（兩組憑證）
-AMEGO_API_BASE = os.getenv("AMEGO_API_BASE", "https://invoice.amego.tw/api")
+# 正確的 API 端點是 https://invoice-api.amego.tw
+AMEGO_API_BASE = os.getenv("AMEGO_API_BASE", "https://invoice-api.amego.tw")
 
 # 環瑞 API 憑證 (branch_id = 1, 2)
 AMEGO_API_KEY_HUANRUI = os.getenv("AMEGO_API_KEY_HUANRUI", "")
@@ -44,20 +45,15 @@ def get_amego_credentials(branch_id: int) -> tuple[str, str]:
         return AMEGO_API_KEY_HUANRUI, AMEGO_API_SECRET_HUANRUI
 
 
-def generate_amego_signature(api_secret: str, params: dict) -> str:
-    """生成光貿 API 簽名"""
-    # 按 key 排序後串接
-    sorted_params = sorted(params.items())
-    param_str = "&".join([f"{k}={v}" for k, v in sorted_params])
-
-    # HMAC-SHA256 簽名
-    signature = hmac.new(
-        api_secret.encode('utf-8'),
-        param_str.encode('utf-8'),
-        hashlib.sha256
-    ).hexdigest()
-
-    return signature
+def generate_amego_signature(json_data: str, timestamp: int, app_key: str) -> str:
+    """
+    生成光貿 API 簽名
+    簽名規則：md5(json_data + timestamp + APP_KEY)
+    """
+    hash_text = json_data + str(timestamp) + app_key
+    m = hashlib.md5()
+    m.update(hash_text.encode('utf-8'))
+    return m.hexdigest()
 
 
 async def postgrest_get(endpoint: str, params: dict = None) -> Any:
@@ -151,47 +147,83 @@ async def invoice_create(
             "note": "請在環境變數設定 AMEGO_API_KEY 和 AMEGO_API_SECRET"
         }
 
-    # 3. 準備 API 參數
+    # 3. 準備發票資料 (依照光貿 API 格式)
     timestamp = int(time.time())
+    order_id = f"P{payment_id}_{timestamp}"  # 訂單編號不可重複
 
-    params = {
-        "api_key": api_key,
-        "timestamp": str(timestamp),
-        "amount": str(int(amount)),  # 發票金額（整數）
-        "tax_type": "1",  # 應稅
-        "invoice_type": "07" if invoice_type == "personal" else "08",  # 07=一般, 08=特種
+    # 計算稅額（5%營業稅）
+    # 總金額 = 銷售額 + 稅額，稅額 = 總金額 / 1.05 * 0.05
+    total_amount = int(amount)
+    sales_amount = round(total_amount / 1.05)  # 未稅金額
+    tax_amount = total_amount - sales_amount   # 稅額
+
+    # 發票資料結構
+    invoice_data = {
+        "OrderId": order_id,
+        "BuyerIdentifier": buyer_tax_id if buyer_tax_id else "0000000000",
+        "BuyerName": buyer_name if buyer_name else "消費者",
+        "BuyerAddress": "",
+        "BuyerTelephoneNumber": "",
+        "BuyerEmailAddress": "",
+        "MainRemark": f"Hour Jungle 繳費單 #{payment_id}",
+        "ProductItem": [
+            {
+                "Description": "共享空間租賃服務",
+                "Quantity": "1",
+                "UnitPrice": str(sales_amount),
+                "Amount": str(sales_amount),
+                "Remark": "",
+                "TaxType": "1"  # 1=應稅
+            }
+        ],
+        "SalesAmount": str(sales_amount),
+        "FreeTaxSalesAmount": "0",
+        "ZeroTaxSalesAmount": "0",
+        "TaxType": "1",  # 1=應稅
+        "TaxRate": "0.05",
+        "TaxAmount": str(tax_amount),
+        "TotalAmount": str(total_amount)
     }
-
-    # 買受人資訊
-    if invoice_type == "business":
-        if not buyer_tax_id:
-            return {"success": False, "message": "公司發票需要統一編號"}
-        params["buyer_identifier"] = buyer_tax_id
-        params["buyer_name"] = buyer_name or ""
 
     # 載具設定
     if carrier_type == "mobile" and carrier_number:
-        params["carrier_type"] = "3J0002"  # 手機條碼
-        params["carrier_id1"] = carrier_number
+        invoice_data["CarrierType"] = "3J0002"
+        invoice_data["CarrierId1"] = carrier_number
+        invoice_data["CarrierId2"] = carrier_number
     elif carrier_type == "natural_person" and carrier_number:
-        params["carrier_type"] = "CQ0001"  # 自然人憑證
-        params["carrier_id1"] = carrier_number
+        invoice_data["CarrierType"] = "CQ0001"
+        invoice_data["CarrierId1"] = carrier_number
+        invoice_data["CarrierId2"] = carrier_number
     elif carrier_type == "donate" and donate_code:
-        params["donate_mark"] = "1"
-        params["love_code"] = donate_code
+        invoice_data["NPOBAN"] = donate_code
 
-    # 是否列印
-    params["print_mark"] = "Y" if print_flag else "N"
+    # 轉換為 JSON 字串
+    json_data = json.dumps(invoice_data, ensure_ascii=False, separators=(',', ':'))
 
-    # 生成簽名
-    params["signature"] = generate_amego_signature(api_secret, params)
+    # 生成簽名：md5(json_data + timestamp + APP_KEY)
+    sign = generate_amego_signature(json_data, timestamp, api_key)
+
+    # POST 資料
+    post_data = {
+        "invoice": api_secret,  # 統一編號
+        "data": json_data,
+        "time": timestamp,
+        "sign": sign
+    }
+
+    logger.info(f"發票 API 請求: invoice={api_secret}, time={timestamp}")
+    logger.info(f"發票資料: {json_data[:200]}...")
 
     # 4. 呼叫 API
     try:
+        import urllib.parse
+        payload = urllib.parse.urlencode(post_data)
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{AMEGO_API_BASE}/invoice/issue",
-                data=params,
+                f"{AMEGO_API_BASE}/json/f0401",
+                content=payload,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
                 timeout=30.0
             )
 
@@ -217,9 +249,11 @@ async def invoice_create(
                     "raw_response": raw_text[:200]
                 }
 
-            if result.get("status") == "success" or result.get("code") == "0":
-                invoice_number = result.get("invoice_number") or result.get("data", {}).get("invoice_number")
-                invoice_date = result.get("invoice_date") or datetime.now().strftime("%Y-%m-%d")
+            # 檢查回應（光貿 API 成功時 code="0" 或 code=0）
+            if str(result.get("code")) == "0":
+                # 從回應中取得發票號碼
+                invoice_number = result.get("invoiceNumber") or result.get("invoice_number")
+                invoice_date = result.get("invoiceDate") or datetime.now().strftime("%Y-%m-%d")
 
                 # 更新繳費記錄
                 await postgrest_patch(
@@ -240,7 +274,7 @@ async def invoice_create(
                     "amount": amount
                 }
             else:
-                error_msg = result.get("message") or result.get("msg") or "未知錯誤"
+                error_msg = result.get("message") or result.get("msg") or str(result)
                 return {
                     "success": False,
                     "message": f"發票開立失敗: {error_msg}",
