@@ -17,10 +17,15 @@ import {
   Wrench,
   Shield,
   AlertTriangle,
-  Calendar
+  Calendar,
+  X
 } from 'lucide-react'
-import { aiChatStream, getAIModels } from '../services/api'
+import { aiChatStream, getAIModels, aiLearning } from '../services/api'
+import api from '../services/api'
 import { useQuery } from '@tanstack/react-query'
+import { FeedbackButtons, RefinementChat } from '../components/ai'
+import Modal from '../components/Modal'
+import { toast } from 'react-hot-toast'
 
 // 寫入操作工具列表（需要確認）
 const WRITE_TOOLS = [
@@ -89,7 +94,8 @@ const CHAT_STORAGE_KEY = 'ai-assistant-chat-history'
 // 預設歡迎訊息
 const DEFAULT_MESSAGE = {
   role: 'assistant',
-  content: '你好！我是 Hour Jungle CRM 助手。我可以幫你查詢客戶資料、繳費狀況、合約到期提醒、會議室預約等。有什麼可以幫你的嗎？'
+  content: '你好！我是 Hour Jungle CRM 助手。我可以幫你查詢客戶資料、繳費狀況、合約到期提醒、會議室預約等。有什麼可以幫你的嗎？',
+  conversationId: null  // 歡迎訊息沒有對話 ID
 }
 
 // 從 localStorage 載入聊天記錄
@@ -136,6 +142,8 @@ export default function AIAssistant() {
   const [currentTool, setCurrentTool] = useState(null)
   const [streamingContent, setStreamingContent] = useState('')
   const [executedTools, setExecutedTools] = useState([]) // 本次對話執行的工具
+  const [showRefinementModal, setShowRefinementModal] = useState(false)
+  const [selectedConversation, setSelectedConversation] = useState(null) // 選中的對話（用於修正）
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -204,8 +212,12 @@ export default function AIAssistant() {
         })
       },
       // onDone
-      () => {
-        setMessages((prev) => [...prev, { role: 'assistant', content: fullContent }])
+      ({ conversationId }) => {
+        setMessages((prev) => [...prev, {
+          role: 'assistant',
+          content: fullContent,
+          conversationId  // 儲存對話 ID 用於回饋功能
+        }])
         setStreamingContent('')
         setIsStreaming(false)
         setCurrentTool(null)
@@ -231,6 +243,44 @@ export default function AIAssistant() {
   const handleQuickPrompt = (prompt) => {
     setInput(prompt)
     inputRef.current?.focus()
+  }
+
+  // 提交回饋
+  const handleFeedbackSubmit = async (payload) => {
+    try {
+      await aiLearning.submitFeedback(payload.conversation_id, {
+        is_good: payload.is_good,
+        rating: payload.rating,
+        feedback_reason: payload.feedback_reason,
+        improvement_tags: payload.improvement_tags
+      })
+      toast.success('感謝您的回饋！')
+    } catch (error) {
+      console.error('提交回饋失敗:', error)
+      toast.error('提交回饋失敗')
+      throw error
+    }
+  }
+
+  // 開啟修正對話
+  const handleRefineClick = (conversationId) => {
+    // 找到對應的訊息
+    const message = messages.find(m => m.conversationId === conversationId)
+    if (message) {
+      setSelectedConversation({
+        id: conversationId,
+        originalContent: message.content
+      })
+      setShowRefinementModal(true)
+    }
+  }
+
+  // 接受修正後的內容
+  const handleAcceptRefinement = (refinedContent) => {
+    // 可選：更新本地訊息顯示
+    setShowRefinementModal(false)
+    setSelectedConversation(null)
+    toast.success('已接受修正版本')
   }
 
   return (
@@ -364,16 +414,29 @@ export default function AIAssistant() {
                 )}
               </div>
               {message.role === 'assistant' && index > 0 && (
-                <button
-                  onClick={() => handleCopy(message.content, index)}
-                  className="absolute -right-8 top-2 p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-                >
-                  {copied === index ? (
-                    <Check className="w-4 h-4 text-green-500" />
-                  ) : (
-                    <Copy className="w-4 h-4" />
+                <>
+                  <button
+                    onClick={() => handleCopy(message.content, index)}
+                    className="absolute -right-8 top-2 p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                  >
+                    {copied === index ? (
+                      <Check className="w-4 h-4 text-green-500" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
+                  </button>
+                  {/* 回饋按鈕 */}
+                  {message.conversationId && (
+                    <div className="mt-2 pt-2 border-t border-gray-200">
+                      <FeedbackButtons
+                        conversationId={message.conversationId}
+                        onFeedbackSubmit={handleFeedbackSubmit}
+                        onRefineClick={handleRefineClick}
+                        disabled={isStreaming}
+                      />
+                    </div>
                   )}
-                </button>
+                </>
               )}
             </div>
             {message.role === 'user' && (
@@ -458,6 +521,30 @@ export default function AIAssistant() {
           AI 助手會直接查詢 CRM 資料庫，回覆僅供參考
         </p>
       </div>
+
+      {/* 修正對話 Modal */}
+      {showRefinementModal && selectedConversation && (
+        <Modal
+          isOpen={showRefinementModal}
+          onClose={() => {
+            setShowRefinementModal(false)
+            setSelectedConversation(null)
+          }}
+          title="修正 AI 回覆"
+          size="lg"
+        >
+          <RefinementChat
+            conversationId={selectedConversation.id}
+            originalContent={selectedConversation.originalContent}
+            onClose={() => {
+              setShowRefinementModal(false)
+              setSelectedConversation(null)
+            }}
+            onAccept={handleAcceptRefinement}
+            model={selectedModel}
+          />
+        </Modal>
+      )}
     </div>
   )
 }

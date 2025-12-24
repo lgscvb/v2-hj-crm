@@ -61,6 +61,7 @@ export const aiChat = async (messages, model = 'claude-sonnet-4') => {
 }
 
 // 串流版本的 AI Chat
+// onDone 回調現在會收到 { conversationId } 物件
 export const aiChatStream = async (messages, model, onChunk, onTool, onDone, onError) => {
   // 使用環境變數統一管理 baseURL
   try {
@@ -95,7 +96,8 @@ export const aiChatStream = async (messages, model, onChunk, onTool, onDone, onE
             } else if (data.type === 'tool') {
               onTool?.(data.name)
             } else if (data.type === 'done') {
-              onDone?.()
+              // 傳遞 conversation_id 給 onDone
+              onDone?.({ conversationId: data.conversation_id || null })
             } else if (data.type === 'error') {
               onError?.(data.message)
             }
@@ -814,6 +816,64 @@ export const legalLetter = {
       tracking_number: trackingNumber,
       notes
     })
+  }
+}
+
+// ============================================================================
+// AI Learning API (AI 學習功能)
+// ============================================================================
+
+export const aiLearning = {
+  // 提交回饋
+  async submitFeedback(conversationId, feedback) {
+    return api.post('/ai/feedback', {
+      conversation_id: conversationId,
+      ...feedback
+    })
+  },
+
+  // 對 AI 回覆提出修正
+  async refine(conversationId, instruction, model = 'claude-sonnet-4') {
+    return api.post('/ai/refine', {
+      conversation_id: conversationId,
+      instruction,
+      model
+    })
+  },
+
+  // 取得修正歷史
+  async getRefinementHistory(conversationId) {
+    return api.get(`/ai/conversations/${conversationId}/refinements`)
+  },
+
+  // 接受修正
+  async acceptRefinement(refinementId) {
+    return api.post(`/ai/refinements/${refinementId}/accept`)
+  },
+
+  // 駁回修正
+  async rejectRefinement(refinementId) {
+    return api.post(`/ai/refinements/${refinementId}/reject`)
+  },
+
+  // 取得回饋統計
+  async getFeedbackStats(days = 30) {
+    return api.get('/ai/feedback/stats', { params: { days } })
+  },
+
+  // 列出對話記錄
+  async getConversations(params = {}) {
+    return api.get('/ai/conversations', { params })
+  },
+
+  // 取得訓練統計
+  async getTrainingStats() {
+    return api.get('/ai/training/stats')
+  },
+
+  // 匯出訓練資料
+  async exportTrainingData(format = 'sft', minRating = null, limit = 1000) {
+    return api.post('/ai/training/export', { format, min_rating: minRating, limit })
   }
 }
 

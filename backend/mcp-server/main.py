@@ -291,6 +291,21 @@ from tools.feedback_tools import (
     set_postgrest_request as set_feedback_postgrest
 )
 
+from tools.learning_tools import (
+    ai_save_conversation,
+    ai_get_conversation,
+    ai_submit_feedback,
+    ai_get_feedback_stats,
+    ai_refine_response,
+    ai_accept_refinement,
+    ai_reject_refinement,
+    ai_get_refinement_history,
+    ai_export_training_data,
+    ai_get_training_stats,
+    ai_get_learning_patterns,
+    ai_list_conversations
+)
+
 
 # ============================================================================
 # MCP Tool 定義
@@ -1167,6 +1182,79 @@ MCP_TOOLS = {
         "handler": feedback_list
     },
 
+    # AI 學習工具
+    "ai_submit_feedback": {
+        "description": "提交 AI 回覆回饋（👍/👎 + 評分）",
+        "parameters": {
+            "conversation_id": {"type": "integer", "description": "對話 ID", "required": True},
+            "is_good": {"type": "boolean", "description": "快速回饋：True=👍好, False=👎不好", "optional": True},
+            "rating": {"type": "integer", "description": "詳細評分 1-5 星", "optional": True},
+            "feedback_reason": {"type": "string", "description": "回饋原因說明", "optional": True},
+            "improvement_tags": {"type": "array", "description": "改進標籤列表", "optional": True}
+        },
+        "handler": ai_submit_feedback
+    },
+    "ai_refine_response": {
+        "description": "對 AI 回覆提出修正指令，AI 會重新生成回覆",
+        "parameters": {
+            "conversation_id": {"type": "integer", "description": "對話 ID", "required": True},
+            "instruction": {"type": "string", "description": "修正指令（如「語氣更親切」「更簡潔」）", "required": True},
+            "model": {"type": "string", "description": "使用的模型", "default": "claude-sonnet-4"}
+        },
+        "handler": ai_refine_response
+    },
+    "ai_accept_refinement": {
+        "description": "標記修正為已接受（用於訓練資料）",
+        "parameters": {
+            "refinement_id": {"type": "integer", "description": "修正記錄 ID", "required": True}
+        },
+        "handler": ai_accept_refinement
+    },
+    "ai_reject_refinement": {
+        "description": "標記修正為已拒絕",
+        "parameters": {
+            "refinement_id": {"type": "integer", "description": "修正記錄 ID", "required": True}
+        },
+        "handler": ai_reject_refinement
+    },
+    "ai_get_refinement_history": {
+        "description": "取得對話的修正歷史",
+        "parameters": {
+            "conversation_id": {"type": "integer", "description": "對話 ID", "required": True}
+        },
+        "handler": ai_get_refinement_history
+    },
+    "ai_get_feedback_stats": {
+        "description": "取得 AI 回饋統計（正面/負面比例、平均評分等）",
+        "parameters": {
+            "days": {"type": "integer", "description": "統計天數", "default": 30}
+        },
+        "handler": ai_get_feedback_stats
+    },
+    "ai_export_training_data": {
+        "description": "匯出 AI 訓練資料（SFT/RLHF/DPO 格式）",
+        "parameters": {
+            "export_type": {"type": "string", "description": "匯出格式：sft/rlhf/dpo", "required": True},
+            "min_rating": {"type": "integer", "description": "最低評分", "default": 4},
+            "include_refinements": {"type": "boolean", "description": "是否包含修正資料", "default": True}
+        },
+        "handler": ai_export_training_data
+    },
+    "ai_get_training_stats": {
+        "description": "取得可匯出的訓練資料統計",
+        "parameters": {},
+        "handler": ai_get_training_stats
+    },
+    "ai_list_conversations": {
+        "description": "列出 AI 對話記錄",
+        "parameters": {
+            "limit": {"type": "integer", "description": "數量限制", "default": 50},
+            "offset": {"type": "integer", "description": "偏移量", "default": 0},
+            "status": {"type": "string", "description": "狀態篩選", "optional": True}
+        },
+        "handler": ai_list_conversations
+    },
+
     # Calendar 工具
     "calendar_create": {
         "description": "建立新的 Google Calendar（用於建立專屬簽約行事曆）",
@@ -2038,6 +2126,7 @@ class AIChatResponse(BaseModel):
     message: str
     model_used: str = ""
     tool_calls: List[dict] = []
+    conversation_id: Optional[int] = None  # 對話 ID，用於後續回饋和修正
 
 
 # ============================================================================
@@ -2321,11 +2410,28 @@ async def ai_chat(request: AIChatRequest):
         # 提取最終文字回應
         final_text = assistant_message.content or ""
 
+        # 儲存對話記錄
+        conversation_id = None
+        try:
+            save_result = await ai_save_conversation(
+                user_message=last_user_message,
+                assistant_message=final_text,
+                model_used=model_key,
+                tool_calls=tool_calls_made,
+                rag_context=rag_context if rag_context else None,
+                status="completed"
+            )
+            if save_result.get("success"):
+                conversation_id = save_result.get("conversation_id")
+        except Exception as save_error:
+            logger.warning(f"Failed to save conversation: {save_error}")
+
         return AIChatResponse(
             success=True,
             message=final_text,
             model_used=model_key,
-            tool_calls=tool_calls_made
+            tool_calls=tool_calls_made,
+            conversation_id=conversation_id
         )
 
     except Exception as e:
@@ -2336,6 +2442,107 @@ async def ai_chat(request: AIChatRequest):
             model_used=request.model,
             tool_calls=[]
         )
+
+
+# ============================================================================
+# AI Learning API Endpoints
+# ============================================================================
+
+class AIFeedbackRequest(BaseModel):
+    """AI 回饋請求"""
+    conversation_id: int
+    is_good: Optional[bool] = None
+    rating: Optional[int] = None
+    feedback_reason: Optional[str] = None
+    improvement_tags: Optional[List[str]] = None
+
+
+class AIRefineRequest(BaseModel):
+    """AI 修正請求"""
+    conversation_id: int
+    instruction: str
+    model: str = "claude-sonnet-4"
+
+
+@app.post("/ai/feedback")
+async def submit_ai_feedback(request: AIFeedbackRequest):
+    """提交 AI 回覆回饋"""
+    result = await ai_submit_feedback(
+        conversation_id=request.conversation_id,
+        is_good=request.is_good,
+        rating=request.rating,
+        feedback_reason=request.feedback_reason,
+        improvement_tags=request.improvement_tags
+    )
+    return result
+
+
+@app.post("/ai/refine")
+async def refine_ai_response(request: AIRefineRequest):
+    """對 AI 回覆提出修正"""
+    result = await ai_refine_response(
+        conversation_id=request.conversation_id,
+        instruction=request.instruction,
+        model=request.model
+    )
+    return result
+
+
+@app.get("/ai/conversations/{conversation_id}/refinements")
+async def get_refinement_history(conversation_id: int):
+    """取得對話的修正歷史"""
+    result = await ai_get_refinement_history(conversation_id)
+    return result
+
+
+@app.post("/ai/refinements/{refinement_id}/accept")
+async def accept_refinement(refinement_id: int):
+    """標記修正為已接受"""
+    result = await ai_accept_refinement(refinement_id)
+    return result
+
+
+@app.post("/ai/refinements/{refinement_id}/reject")
+async def reject_refinement(refinement_id: int):
+    """標記修正為已拒絕"""
+    result = await ai_reject_refinement(refinement_id)
+    return result
+
+
+@app.get("/ai/feedback/stats")
+async def get_feedback_stats(days: int = 30):
+    """取得回饋統計"""
+    result = await ai_get_feedback_stats(days)
+    return result
+
+
+@app.get("/ai/conversations")
+async def list_conversations(limit: int = 50, offset: int = 0, status: Optional[str] = None):
+    """列出對話記錄"""
+    result = await ai_list_conversations(limit=limit, offset=offset, status=status)
+    return result
+
+
+@app.get("/ai/training/stats")
+async def get_training_stats():
+    """取得訓練資料統計"""
+    result = await ai_get_training_stats()
+    return result
+
+
+@app.post("/ai/training/export")
+async def export_training_data(
+    export_type: str = "sft",
+    min_rating: int = 4,
+    include_refinements: bool = True
+):
+    """匯出訓練資料"""
+    result = await ai_export_training_data(
+        export_type=export_type,
+        min_rating=min_rating,
+        include_refinements=include_refinements
+    )
+    return result
 
 
 # ============================================================================
@@ -2458,16 +2665,39 @@ async def ai_chat_stream(request: AIChatRequest):
                 }
             )
 
+            # 收集完整回應內容
+            full_content = ""
+
             # 如果已有最終內容，直接輸出
             if assistant_message.content:
+                full_content = assistant_message.content
                 yield f"data: {json.dumps({'type': 'content', 'text': assistant_message.content}, ensure_ascii=False)}\n\n"
             else:
                 # 串流輸出
                 for chunk in stream:
                     if chunk.choices[0].delta.content:
-                        yield f"data: {json.dumps({'type': 'content', 'text': chunk.choices[0].delta.content}, ensure_ascii=False)}\n\n"
+                        chunk_text = chunk.choices[0].delta.content
+                        full_content += chunk_text
+                        yield f"data: {json.dumps({'type': 'content', 'text': chunk_text}, ensure_ascii=False)}\n\n"
 
-            yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+            # 儲存對話記錄
+            conversation_id = None
+            try:
+                save_result = await ai_save_conversation(
+                    user_message=last_user_message,
+                    assistant_message=full_content,
+                    model_used=model_key,
+                    tool_calls=tool_calls_made if tool_calls_made else None,
+                    rag_context=rag_context if rag_context else None,
+                    status="completed"
+                )
+                if save_result.get("success"):
+                    conversation_id = save_result.get("conversation_id")
+            except Exception as save_error:
+                logger.warning(f"Failed to save conversation in stream: {save_error}")
+
+            # 發送完成事件（包含 conversation_id）
+            yield f"data: {json.dumps({'type': 'done', 'conversation_id': conversation_id}, ensure_ascii=False)}\n\n"
 
         except Exception as e:
             logger.error(f"AI chat stream error: {e}")
