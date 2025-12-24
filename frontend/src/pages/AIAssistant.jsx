@@ -90,6 +90,29 @@ const TOOL_NAMES = {
 
 // localStorage 存儲 key
 const CHAT_STORAGE_KEY = 'ai-assistant-chat-history'
+const MODEL_STORAGE_KEY = 'ai-assistant-selected-model'
+
+// 從 localStorage 載入選擇的模型
+const loadSelectedModel = () => {
+  try {
+    const saved = localStorage.getItem(MODEL_STORAGE_KEY)
+    if (saved) {
+      return saved
+    }
+  } catch (e) {
+    console.error('載入模型設定失敗:', e)
+  }
+  return 'claude-sonnet-4'
+}
+
+// 儲存模型選擇到 localStorage
+const saveSelectedModel = (model) => {
+  try {
+    localStorage.setItem(MODEL_STORAGE_KEY, model)
+  } catch (e) {
+    console.error('儲存模型設定失敗:', e)
+  }
+}
 
 // 預設歡迎訊息
 const DEFAULT_MESSAGE = {
@@ -137,7 +160,7 @@ export default function AIAssistant() {
   const [messages, setMessages] = useState(loadChatHistory)
   const [input, setInput] = useState('')
   const [copied, setCopied] = useState(null)
-  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4')
+  const [selectedModel, setSelectedModel] = useState(loadSelectedModel)
   const [isStreaming, setIsStreaming] = useState(false)
   const [currentTool, setCurrentTool] = useState(null)
   const [streamingContent, setStreamingContent] = useState('')
@@ -167,6 +190,11 @@ export default function AIAssistant() {
   useEffect(() => {
     saveChatHistory(messages)
   }, [messages])
+
+  // 儲存模型選擇到 localStorage
+  useEffect(() => {
+    saveSelectedModel(selectedModel)
+  }, [selectedModel])
 
   // 發送訊息（使用串流）
   const handleSend = useCallback(async () => {
