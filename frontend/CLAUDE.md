@@ -1,8 +1,10 @@
 # Hour Jungle CRM - 叢林小管家前端
 
+> V2 前端，部署於 Cloudflare Pages (`hj-v2.pages.dev`)
+
 ## 專案概述
 
-這是 Hour Jungle 的 CRM 管理後台前端，專為聯合辦公空間（虛擬辦公室）設計的客戶關係管理系統。
+Hour Jungle CRM 管理後台前端，專為聯合辦公空間（虛擬辦公室）設計的客戶關係管理系統。
 
 ## 技術棧
 
@@ -51,10 +53,11 @@ src/
 │   └── Settings.jsx     # 系統設定
 │
 ├── hooks/
-│   └── useApi.js        # React Query hooks
+│   ├── useApi.js        # React Query hooks
+│   └── useModal.js      # Modal 狀態管理
 │
 ├── services/
-│   └── api.js           # API 客戶端 (600+ 行)
+│   └── api.js           # API 客戶端
 │
 ├── store/
 │   └── useStore.js      # Zustand 狀態管理
@@ -73,8 +76,7 @@ src/
 
 #### 1. MCP Tools API（業務操作）
 ```javascript
-// 調用 MCP 工具
-POST /api/tools/call
+POST /tools/call
 {
   "name": "crm_record_payment",
   "arguments": { "payment_id": 123, "payment_method": "transfer" }
@@ -83,18 +85,16 @@ POST /api/tools/call
 
 #### 2. PostgREST API（直接查詢）
 ```javascript
-// 查詢資料
 GET /api/db/customers?status=eq.active
 GET /api/db/v_payments_due?order=due_date
 
-// 更新資料
 PATCH /api/db/customers?id=eq.123
 { "phone": "0912345678" }
 ```
 
 #### 3. AI Chat API
 ```javascript
-POST /api/ai/chat
+POST /ai/chat
 { "message": "今天有哪些待收款？" }
 ```
 
@@ -116,7 +116,7 @@ POST /api/ai/chat
 # 安裝依賴
 npm install
 
-# 開發伺服器 (port 3000)
+# 開發伺服器 (port 5173)
 npm run dev
 
 # 建構生產版本
@@ -128,13 +128,30 @@ npm run preview
 
 ---
 
-## 環境變數
+## 部署
 
-```env
-VITE_API_URL=https://auto.yourspce.org
+### Cloudflare Pages (V2 正式環境)
+
+推送到 `main` 分支會**自動觸發**部署：
+
+```bash
+git add . && git commit -m "feat: 描述" && git push
+# 自動部署到 hj-v2.pages.dev
 ```
 
-開發時 Vite 會將 API 請求代理到 MCP Server。
+**Cloudflare Pages 設定**：
+- Build command: `npm run build`
+- Build output directory: `dist`
+- Root directory: `frontend`
+
+### 環境變數
+
+```env
+# Cloudflare Pages 環境變數
+VITE_API_BASE_URL=https://api-v2.yourspce.org
+```
+
+開發時 Vite 會將 API 請求代理到後端。
 
 ---
 
@@ -191,35 +208,6 @@ await callTool('line_send_payment_reminder', {
 
 ---
 
-## 部署
-
-### 手動部署
-
-```bash
-# 建構
-npm run build
-
-# 打包
-tar -czvf dist.tar.gz dist/
-
-# 上傳到 GCP VM
-gcloud compute scp dist.tar.gz instance-20251201-132636:/tmp/ \
-  --zone=us-west1-b --project=gen-lang-client-0281456461
-
-# 部署
-gcloud compute ssh instance-20251201-132636 \
-  --zone=us-west1-b --project=gen-lang-client-0281456461 \
-  --command="cd /var/www/html && sudo rm -rf * && sudo tar -xzf /tmp/dist.tar.gz --strip-components=1"
-```
-
-### GitHub Actions 自動部署
-
-推送到 `main` 分支會自動觸發 CI/CD：
-- 位置：`.github/workflows/deploy.yml`
-- 流程：npm ci → npm run build → SSH 到 VM 部署
-
----
-
 ## PDF 生成功能
 
 ### 架構說明
@@ -257,8 +245,6 @@ public/fonts/
 當需要新增字符到子集字體時：
 
 ```bash
-# 1. 編輯 charset.txt 加入新字符
-# 2. 重新生成子集
 cd public/fonts
 pyftsubset NotoSansTC-Regular.ttf --text-file=charset.txt --output-file=NotoSansTC-Regular-Subset.ttf
 pyftsubset NotoSansTC-Bold.ttf --text-file=charset.txt --output-file=NotoSansTC-Bold-Subset.ttf
@@ -289,53 +275,33 @@ const canvas = await html2canvas(ref.current, {
 平面圖儲存在 GCS，需要 CORS 設定讓 html2canvas 可以載入：
 
 ```bash
-# 更新 CORS 設定
 echo '[{"origin": ["*"], "method": ["GET", "HEAD"], "responseHeader": ["Content-Type", "Access-Control-Allow-Origin"], "maxAgeSeconds": 3600}]' > /tmp/cors.json
 gcloud storage buckets update gs://hourjungle-contracts --cors-file=/tmp/cors.json
 ```
 
 ---
 
-## 前端 Nginx 設定
+## Vite Dev Proxy（本地開發代理）
 
-```nginx
-# /etc/nginx/sites-available/smartoffice-crm
-server {
-    listen 80;
-    server_name hj.yourspce.org;
-    root /var/www/html;
-    index index.html;
-
-    # SPA 路由
-    location / {
-        try_files $uri $uri/ /index.html;
+```javascript
+// vite.config.js
+export default defineConfig({
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'https://api-v2.yourspce.org',
+        changeOrigin: true,
+        secure: true,
+      },
+      '/tools': {
+        target: 'https://api-v2.yourspce.org',
+        changeOrigin: true,
+        secure: true,
+      }
     }
-
-    # API 代理（使用 HTTPS）
-    location /api/tools/ {
-        proxy_pass https://auto.yourspce.org/tools/;
-        proxy_ssl_server_name on;
-        proxy_set_header Host auto.yourspce.org;
-    }
-
-    location /api/db/ {
-        proxy_pass https://auto.yourspce.org/api/db/;
-        proxy_ssl_server_name on;
-        proxy_set_header Host auto.yourspce.org;
-    }
-
-    location /api/ai/ {
-        proxy_pass https://auto.yourspce.org/ai/;
-        proxy_ssl_server_name on;
-        proxy_set_header Host auto.yourspce.org;
-    }
-
-    # 字體快取
-    location /fonts/ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-}
+  }
+})
 ```
 
 ---
@@ -353,135 +319,17 @@ server {
   1. GCS bucket 設定 CORS
   2. img 標籤加上 `crossOrigin="anonymous"`
 
-### Cloudflare HTTPS
-- **問題**：API 請求返回 405
-- **原因**：Cloudflare 強制 HTTPS，nginx proxy_pass 用 HTTP 會失敗
-- **解決**：proxy_pass 使用 `https://` + `proxy_ssl_server_name on`
+### API 端點注意
+- ❌ `/api/tools/call` - 錯誤！會回傳 404
+- ✅ `/tools/call` - 正確的 MCP 工具端點
 
-### Nginx proxy_pass Trailing Slash
-- **問題**：`/api/api/users` 路徑災難
-- **原因**：proxy_pass 結尾沒有斜線，導致 location 路徑被保留
-- **解決**：
-  ```nginx
-  # ❌ 錯誤：/api/tools/call → /api/tools/call（路徑被保留）
-  location /api/tools/ {
-      proxy_pass https://auto.yourspce.org;
-  }
-
-  # ✅ 正確：/api/tools/call → /tools/call（路徑被剝離）
-  location /api/tools/ {
-      proxy_pass https://auto.yourspce.org/tools/;  # 注意結尾斜線
-  }
-  ```
-
-### 環境變數地獄（本地 vs 正式環境）
-- **問題**：本地開發用 `localhost`，git push 後要改成正式 URL，容易出錯
-- **解決**：環境變數 + Vite Dev Proxy（見下方）
-
----
-
-## 環境變數策略
-
-### 黃金準則
+### 環境變數策略
 **程式碼裡永遠不要寫死 (Hardcode) 網址**
-
-### .env 檔案配置
-
-```bash
-# .env.development（本地開發，不要 commit）
-VITE_API_URL=
-
-# .env.production（正式環境）
-VITE_API_URL=
-```
-
-### API 客戶端使用方式
 
 ```javascript
 // src/services/api.js
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '',  // 空字串 = 同網域
+  baseURL: import.meta.env.VITE_API_BASE_URL || '',
   timeout: 30000
 })
 ```
-
-### Vite Dev Proxy（本地開發代理）
-
-```javascript
-// vite.config.js
-export default defineConfig({
-  server: {
-    port: 3000,
-    proxy: {
-      '/api': {
-        target: 'https://auto.yourspce.org',
-        changeOrigin: true,
-        secure: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
-      }
-    }
-  }
-})
-```
-
-**工作原理**：
-1. 本地開發：`/api/db/customers` → Vite 代理 → `https://auto.yourspce.org/db/customers`
-2. 正式環境：`/api/db/customers` → Nginx 代理 → 後端
-
----
-
-## Cloudflare Tunnel 策略（進階）
-
-### 為什麼用 Cloudflare Tunnel？
-
-| 傳統 Nginx | Cloudflare Tunnel |
-|-----------|-------------------|
-| 開 Port 443 等人進來 | 主動挖地道連去 Cloudflare |
-| 需要管理 SSL 憑證 | Cloudflare 處理 SSL |
-| 需要設定防火牆 | 外網連不到，只有 Tunnel 能連 |
-| 路徑重寫地獄 | UI 設定直觀 |
-
-### 子網域策略（推薦）
-
-用「子網域」取代「路徑重寫」，徹底消滅 `/api/api` 問題：
-
-| 服務 | 子網域 | 內部目標 |
-|------|--------|----------|
-| CRM 前端 | `hj.yourspce.org` | `localhost:80` |
-| MCP Server | `auto.yourspce.org` | `localhost:8000` |
-| PostgREST | `db.yourspce.org`（可選） | `localhost:3000` |
-
-### 設定步驟
-
-```bash
-# 1. 安裝 cloudflared
-brew install cloudflared  # macOS
-
-# 2. 登入 Cloudflare
-cloudflared tunnel login
-
-# 3. 建立 Tunnel
-cloudflared tunnel create hourjungle
-
-# 4. 設定 config.yml
-cat > ~/.cloudflared/config.yml << 'EOF'
-tunnel: <TUNNEL_ID>
-credentials-file: ~/.cloudflared/<TUNNEL_ID>.json
-
-ingress:
-  - hostname: hj.yourspce.org
-    service: http://localhost:80
-  - hostname: auto.yourspce.org
-    service: http://localhost:8000
-  - service: http_status:404
-EOF
-
-# 5. 執行 Tunnel
-cloudflared tunnel run hourjungle
-```
-
-### DNS 設定
-
-在 Cloudflare Dashboard 設定 CNAME：
-- `hj.yourspce.org` → `<TUNNEL_ID>.cfargotunnel.com`
-- `auto.yourspce.org` → `<TUNNEL_ID>.cfargotunnel.com`

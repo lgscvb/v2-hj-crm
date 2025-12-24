@@ -16,7 +16,8 @@ import {
   Cpu,
   Wrench,
   Shield,
-  AlertTriangle
+  AlertTriangle,
+  Calendar
 } from 'lucide-react'
 import { aiChatStream, getAIModels } from '../services/api'
 import { useQuery } from '@tanstack/react-query'
@@ -37,7 +38,11 @@ const WRITE_TOOLS = [
   'invoice_create',
   'invoice_void',
   'invoice_allowance',
-  'contract_generate_pdf'
+  'contract_generate_pdf',
+  'booking_create',
+  'booking_cancel',
+  'booking_update',
+  'booking_send_reminder'
 ]
 
 // 工具名稱中文對照
@@ -67,7 +72,15 @@ const TOOL_NAMES = {
   invoice_query: '查詢發票',
   invoice_allowance: '開立折讓單',
   contract_generate_pdf: '生成合約 PDF',
-  contract_preview: '預覽合約'
+  contract_preview: '預覽合約',
+  booking_list_rooms: '列出會議室',
+  booking_check_availability: '查詢可用時段',
+  booking_create: '建立會議室預約',
+  booking_cancel: '取消預約',
+  booking_update: '修改預約',
+  booking_list: '列出預約',
+  booking_get: '取得預約詳情',
+  booking_send_reminder: '發送預約提醒'
 }
 
 // localStorage 存儲 key
@@ -76,7 +89,7 @@ const CHAT_STORAGE_KEY = 'ai-assistant-chat-history'
 // 預設歡迎訊息
 const DEFAULT_MESSAGE = {
   role: 'assistant',
-  content: '你好！我是 Hour Jungle CRM 助手。我可以幫你查詢客戶資料、繳費狀況、合約到期提醒等。有什麼可以幫你的嗎？'
+  content: '你好！我是 Hour Jungle CRM 助手。我可以幫你查詢客戶資料、繳費狀況、合約到期提醒、會議室預約等。有什麼可以幫你的嗎？'
 }
 
 // 從 localStorage 載入聊天記錄
@@ -111,7 +124,7 @@ const QUICK_PROMPTS = [
   { icon: Users, label: '查詢客戶', prompt: '幫我查詢客戶資料' },
   { icon: DollarSign, label: '逾期款項', prompt: '列出所有逾期的繳費記錄' },
   { icon: FileText, label: '即將到期', prompt: '哪些合約即將到期？' },
-  { icon: Search, label: '營收統計', prompt: '這個月的營收是多少？' }
+  { icon: Calendar, label: '會議室預約', prompt: '查詢今天的會議室預約' }
 ]
 
 export default function AIAssistant() {

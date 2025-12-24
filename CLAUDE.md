@@ -1,17 +1,19 @@
 # Hour Jungle CRM v2
 
+> 詳細架構請參考 `../CLAUDE.md`（工作區層級文件）
+
 ## 專案架構
 
 ```
-v2-hj-crm/
-├── backend/           # MCP Server + PostgreSQL + PostgREST
-│   ├── mcp-server/    # FastAPI 後端
-│   ├── services/      # PDF Generator (Cloud Run)
-│   ├── sql/           # Database migrations
-│   ├── nginx/         # Nginx 配置
+v2-hj-crm/                    ← Monorepo (GitHub: lgscvb/v2-hj-crm)
+├── backend/                  # MCP Server + PostgreSQL + PostgREST
+│   ├── mcp-server/           # FastAPI 後端
+│   ├── services/             # PDF Generator (Cloud Run)
+│   ├── sql/                  # Database migrations
+│   ├── nginx/                # Nginx 配置
 │   └── docker-compose.yml
 │
-└── frontend/          # React 前端 (Cloudflare Pages)
+└── frontend/                 # React 前端 (Cloudflare Pages)
     ├── src/
     ├── public/
     └── package.json
@@ -23,33 +25,41 @@ v2-hj-crm/
 |------|-----|
 | GCP 專案 | hj-crm (hj-crm-482012) |
 | 區域 | us-west1 |
-| 後端 VM | e2-medium (2 vCPU, 4GB) |
-| 前端 | Cloudflare Pages |
+| 後端 VM | hj-crm-vm (e2-medium) |
+| 前端 | Cloudflare Pages (自動部署) |
 
 ## 域名
 
-| 域名 | 用途 |
-|------|------|
-| `hj-v2.yourspce.org` | CRM 前端 (Cloudflare Pages) |
-| `api-v2.yourspce.org` | MCP Server API |
+| 域名 | 用途 | 部署方式 |
+|------|------|----------|
+| `hj-v2.pages.dev` | CRM 前端 | Cloudflare Pages |
+| `api-v2.yourspce.org` | MCP Server API | Cloudflare Tunnel → GCP VM |
 
 ## 快速部署
 
 ### 後端 (GCP VM)
 
 ```bash
-# SSH 到 VM
-gcloud compute ssh hj-crm-vm --zone=us-west1-a --project=hj-crm-482012
+# 推送程式碼
+git add . && git commit -m "feat: 描述" && git push
 
-# 拉取最新程式碼並重啟
-cd ~/v2-hj-crm/backend
-git pull
-docker compose up -d --build
+# SSH 到 VM 更新（注意：VM 上資料夾名稱為 hourjungle-crm）
+gcloud compute ssh hj-crm-vm --zone=us-west1-a --project=hj-crm-482012 \
+  --command="cd ~/hourjungle-crm && git pull && docker compose restart mcp-server"
+
+# 如需重建 Docker image
+gcloud compute ssh hj-crm-vm --zone=us-west1-a --project=hj-crm-482012 \
+  --command="cd ~/hourjungle-crm && git pull && docker compose build mcp-server && docker compose up -d mcp-server"
 ```
 
 ### 前端 (Cloudflare Pages)
 
-推送到 `main` 分支會自動觸發 Cloudflare Pages 部署。
+推送到 `main` 分支會**自動觸發**部署，無需手動操作。
+
+```bash
+git add . && git commit -m "feat: 描述" && git push
+# Cloudflare Pages 會自動建構並部署到 hj-v2.pages.dev
+```
 
 ## 環境變數
 
@@ -67,7 +77,7 @@ GCS_BUCKET=hourjungle-contracts
 ### 前端
 
 - 開發環境：使用 vite proxy 代理到 `api-v2.yourspce.org`
-- 正式環境：`VITE_API_BASE_URL=https://api-v2.yourspce.org`
+- 正式環境：Cloudflare Pages 設定 `VITE_API_BASE_URL`
 
 ## 核心語言規定
 
@@ -83,14 +93,6 @@ GCS_BUCKET=hourjungle-contracts
 2. **Modal 除非完全不依賴頁面上下文，否則一律在 page 內渲染**
 3. **狀態可以抽 hook，但不做 App-level ActionManager**（避免 DevTools 與上下文斷裂）
 4. **若重構引入耦合且難解，允許回退並以新分頁重做**（舊頁進入 maintenance mode）
-
-### 不採用的方案
-
-| 方案 | 不採用原因 |
-|------|-----------|
-| Feature-Based 目錄結構 | 專案規模不大，全面遷移 ROI 不高 |
-| Global ActionManager | Modal 和觸發頁面解耦太遠，debug 不直觀 |
-| Zustand 管 Modal | 太重，useModal hook 更輕量 |
 
 ### 已引入的工具
 
@@ -119,15 +121,4 @@ modal.isPayOpen  // true/false
 |--------|------|------|
 | P1 | Payments.jsx: 試改 Pay Modal 使用 usePaymentModals | ⏳ 待執行 |
 | P1 | Payments.jsx: 改其他 Modal (Waive/Undo/Reminder/Delete/Generate) | ⏳ 待執行 |
-| P1 | Payments.jsx: 刪除舊的 useState(showXxxModal) | ⏳ 待執行 |
 | P2 | Contracts.jsx: 套用相同模式 | ⏳ 待執行 |
-
-### 回退指令
-
-```bash
-# 單一檔案回退
-git checkout frontend/src/pages/Payments.jsx
-
-# 整個 commit 回退
-git revert HEAD
-```

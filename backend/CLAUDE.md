@@ -1,8 +1,10 @@
 # Hour Jungle CRM - MCP Server + PostgreSQL
 
+> V2 後端，部署於 GCP VM 透過 Cloudflare Tunnel (`api-v2.yourspce.org`)
+
 ## 專案概述
 
-這是 Hour Jungle CRM 的後端系統，採用 PostgreSQL + PostgREST + MCP Server 三層架構，提供 40+ MCP 工具供前端和 AI Agent 調用。
+Hour Jungle CRM 後端系統，採用 PostgreSQL + PostgREST + MCP Server 三層架構，提供 40+ MCP 工具供前端和 AI Agent 調用。
 
 ## 技術棧
 
@@ -19,7 +21,7 @@
 ## 專案結構
 
 ```
-hourjungle-crm/
+backend/
 ├── mcp-server/              # FastAPI MCP 伺服器
 │   ├── main.py              # 主入口、路由註冊
 │   ├── tools/               # MCP 工具模組
@@ -58,8 +60,35 @@ services:
   postgrest:     # PostgREST API (port 3000)
   mcp-server:    # FastAPI MCP (port 8080)
   nginx:         # 反向代理 (port 80/443)
-  pdf-generator: # PDF 生成 (Cloud Run)
+  redis:         # Redis 快取 (port 6379)
 ```
+
+---
+
+## 部署
+
+### GCP VM (透過 Cloudflare Tunnel)
+
+```bash
+# 推送程式碼
+cd /path/to/v2-hj-crm
+git add . && git commit -m "feat: 描述" && git push
+
+# SSH 到 VM 更新（注意：VM 上資料夾名稱為 hourjungle-crm）
+gcloud compute ssh hj-crm-vm --zone=us-west1-a --project=hj-crm-482012 \
+  --command="cd ~/hourjungle-crm && git pull && docker compose restart mcp-server"
+
+# 如需重建 Docker image
+gcloud compute ssh hj-crm-vm --zone=us-west1-a --project=hj-crm-482012 \
+  --command="cd ~/hourjungle-crm && git pull && docker compose build mcp-server && docker compose up -d mcp-server"
+```
+
+### 域名配置
+
+| 域名 | 說明 |
+|------|------|
+| `api-v2.yourspce.org` | Cloudflare Tunnel 入口（推薦） |
+| `auto.yourspce.org` | 直接暴露 VM IP（可用，同資料庫） |
 
 ---
 
@@ -100,6 +129,7 @@ services:
 - **legal_letter_***: 存證信函
 - **booking_***: 會議室預約
 - **renewal_***: 續約流程管理
+- **floor_plan_***: 平面圖生成
 
 ---
 
@@ -137,7 +167,6 @@ MY_TOOLS = [
 async def my_new_tool(param1: str, param2: int = 0) -> dict[str, Any]:
     """工具實作邏輯"""
     async with httpx.AsyncClient() as client:
-        # 透過 PostgREST 查詢
         resp = await client.get(
             f"{POSTGREST_URL}/my_table",
             params={"column": f"eq.{param1}"}
@@ -155,17 +184,14 @@ TOOL_HANDLERS = {
 ```python
 from tools.my_tools import MY_TOOLS, TOOL_HANDLERS
 
-# 加入工具列表
 ALL_TOOLS.extend(MY_TOOLS)
-
-# 加入處理器
 ALL_HANDLERS.update(TOOL_HANDLERS)
 ```
 
 ### 3. 測試工具
 
 ```bash
-curl -X POST http://localhost:8080/tools/call \
+curl -X POST https://api-v2.yourspce.org/tools/call \
   -H "Content-Type: application/json" \
   -d '{"name": "my_new_tool", "arguments": {"param1": "test"}}'
 ```
@@ -226,12 +252,8 @@ CREATE TABLE IF NOT EXISTS new_table (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 建立視圖
 CREATE OR REPLACE VIEW v_new_summary AS
-SELECT
-    id,
-    name,
-    created_at
+SELECT id, name, created_at
 FROM new_table
 WHERE created_at > NOW() - INTERVAL '30 days';
 ```
@@ -239,7 +261,12 @@ WHERE created_at > NOW() - INTERVAL '30 days';
 ### 2. 執行 Migration
 
 ```bash
-docker exec -i hourjungle-crm-postgres-1 psql -U postgres -d crm < sql/migrations/015_add_new_table.sql
+# 本地
+docker exec -i hj-postgres psql -U postgres -d crm < sql/migrations/015_add_new_table.sql
+
+# GCP VM
+gcloud compute ssh hj-crm-vm --zone=us-west1-a --project=hj-crm-482012 \
+  --command="docker exec -i hj-postgres psql -U postgres -d crm < /path/to/migration.sql"
 ```
 
 ### 3. PostgREST 自動生成 API
@@ -263,6 +290,8 @@ docker exec -i hourjungle-crm-postgres-1 psql -U postgres -d crm < sql/migration
 | `audit_logs` | 審計日誌 |
 | `quotes` | 報價單 |
 | `invoices` | 電子發票 |
+| `floor_plans` | 場館平面圖 |
+| `floor_positions` | 平面圖位置 |
 
 ---
 
@@ -305,7 +334,7 @@ docker compose logs -f mcp-server
 docker compose build mcp-server && docker compose up -d mcp-server
 
 # 進入 PostgreSQL
-docker exec -it hourjungle-crm-postgres-1 psql -U postgres -d crm
+docker exec -it hj-postgres psql -U postgres -d crm
 
 # 測試 API
 curl http://localhost:8080/health
@@ -325,254 +354,24 @@ curl http://localhost:3000/customers?limit=5
 
 ## LINE Bot 配置
 
-### LINE Developers Console 設定
-
-1. 前往 [LINE Developers Console](https://developers.line.biz/console/)
-2. 建立 Provider → 建立 Messaging API Channel
-3. 取得以下資訊：
-   - **Channel Access Token** (長效)
-   - **Channel Secret**
-
 ### Webhook 配置
 
 ```
-Webhook URL: https://auto.yourspce.org/line/webhook
+Webhook URL: https://api-v2.yourspce.org/line/webhook
 ```
 
 在 LINE Console 設定：
 - ✅ Use webhook
-- ✅ Allow bot to join group chats (如需群組功能)
 - ❌ Auto-reply messages (由系統處理)
 - ❌ Greeting messages (由系統處理)
 
-### LINE Messaging API 使用
-
-```python
-# mcp-server/tools/line_tools.py
-
-from linebot import LineBotApi
-from linebot.models import TextSendMessage, FlexSendMessage
-
-line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
-
-# 發送文字訊息
-line_bot_api.push_message(
-    user_id,
-    TextSendMessage(text="您好！")
-)
-
-# 發送 Flex Message
-line_bot_api.push_message(
-    user_id,
-    FlexSendMessage(alt_text="通知", contents=flex_content)
-)
-```
-
-### Flex Message 範例（繳費提醒）
-
-```json
-{
-  "type": "bubble",
-  "body": {
-    "type": "box",
-    "layout": "vertical",
-    "contents": [
-      {"type": "text", "text": "繳費提醒", "weight": "bold", "size": "lg"},
-      {"type": "text", "text": "您有一筆款項即將到期"},
-      {"type": "text", "text": "金額：$15,000", "color": "#ff0000"}
-    ]
-  },
-  "footer": {
-    "type": "box",
-    "layout": "horizontal",
-    "contents": [
-      {"type": "button", "action": {"type": "uri", "label": "立即繳費", "uri": "https://..."}}
-    ]
-  }
-}
-```
-
 ---
 
-## GCP 配置
+## GCP 資源
 
-### 部署架構
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Cloudflare (DNS + SSL)               │
-│                    auto.yourspce.org                    │
-└─────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────┐
-│              GCP Compute Engine VM                      │
-│              (e2-medium, us-west1-b)                    │
-│  ┌───────────────────────────────────────────────────┐ │
-│  │  Docker Compose                                    │ │
-│  │  ├─ nginx (80/443)                                │ │
-│  │  ├─ mcp-server (8080)                             │ │
-│  │  ├─ postgrest (3000)                              │ │
-│  │  ├─ postgres (5432)                               │ │
-│  │  └─ redis (6379)                                  │ │
-│  └───────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────┐
-│              GCP Cloud Run                              │
-│              pdf-generator service                      │
-│              (按需啟動，生成 PDF 後存入 GCS)            │
-└─────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────┐
-│              GCP Cloud Storage                          │
-│              hourjungle-pdfs bucket                     │
-│              (合約、報價單、存證信函 PDF)               │
-└─────────────────────────────────────────────────────────┘
-```
-
-### GCP VM 部署流程
-
-```bash
-# 1. SSH 到 VM
-gcloud compute ssh --zone "us-west1-b" "hourjungle-crm"
-
-# 2. 進入專案目錄
-cd ~/hourjungle-crm
-
-# 3. 拉取最新代碼
-git pull origin main
-
-# 4. 重建並啟動服務
-docker compose build
-docker compose up -d
-
-# 5. 查看日誌
-docker compose logs -f mcp-server
-```
-
-### Cloud Run (PDF Generator)
-
-```bash
-# 部署 PDF Generator 到 Cloud Run
-cd services/pdf-generator
-
-gcloud run deploy pdf-generator \
-  --source . \
-  --region us-west1 \
-  --allow-unauthenticated \
-  --set-env-vars "GCS_BUCKET=hourjungle-pdfs"
-```
-
-### 域名配置
-
-| 域名 | 指向 | 用途 |
+| 資源 | 名稱 | 說明 |
 |------|------|------|
-| `auto.yourspce.org` | GCP VM IP | MCP Server + CRM API |
-| `hj.yourspce.org` | Cloudflare Pages / VM | CRM 前端 |
-
-### Cloudflare 設定
-
-- **SSL/TLS**: Full (strict)
-- **Proxy**: 啟用 (橘色雲朵)
-- **Page Rules**: 強制 HTTPS
-
-### GitHub Actions CI/CD
-
-```yaml
-# .github/workflows/deploy.yml
-name: Deploy to GCP
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: google-github-actions/ssh-compute@v1
-        with:
-          instance_name: hourjungle-crm
-          zone: us-west1-b
-          ssh_private_key: ${{ secrets.GCP_SSH_KEY }}
-          command: |
-            cd ~/hourjungle-crm
-            git pull origin main
-            docker compose build
-            docker compose up -d
-```
-
----
-
-## 平面圖生成功能
-
-### 功能說明
-
-自動生成場館平面圖 PDF，顯示位置編號與租戶對照。
-
-### 資料結構
-
-```sql
--- 場館平面圖
-floor_plans (id, branch_id, name, image_filename, width, height)
-
--- 位置坐標 (107 個位置)
-floor_positions (id, floor_plan_id, position_number, x, y, width, height)
-
--- 合約關聯
-contracts.position_number → 對應 floor_positions.position_number
-```
-
-### MCP 工具
-
-| 工具名稱 | 說明 |
-|---------|------|
-| `floor_plan_get_positions` | 取得場館所有位置的當前租戶狀態 |
-| `floor_plan_update_position` | 更新位置的租戶關聯（設定或清空） |
-| `floor_plan_generate` | 生成平面圖 PDF |
-| `floor_plan_preview_html` | 預覽平面圖 HTML |
-
-### 部署步驟
-
-1. **執行資料庫 Migration**
-   ```bash
-   docker exec -i hourjungle-crm-postgres-1 psql -U postgres -d crm < sql/migrations/015_floor_plan.sql
-   ```
-
-2. **上傳底圖到 GCS**
-   ```bash
-   gsutil cp /path/to/floor_plan_image.png gs://hourjungle-pdfs/floor_plans/dazhong_floor_plan.png
-   ```
-
-3. **重新部署 PDF Generator**
-   ```bash
-   cd services/pdf-generator
-   gcloud run deploy pdf-generator --source . --region us-west1
-   ```
-
-4. **重建 MCP Server**
-   ```bash
-   docker compose build mcp-server && docker compose up -d mcp-server
-   ```
-
-### 使用方式
-
-```bash
-# 取得位置狀態
-curl -X POST http://localhost:8080/tools/call \
-  -H "Content-Type: application/json" \
-  -d '{"tool": "floor_plan_get_positions", "parameters": {"branch_id": 1}}'
-
-# 設定位置租戶
-curl -X POST http://localhost:8080/tools/call \
-  -H "Content-Type: application/json" \
-  -d '{"tool": "floor_plan_update_position", "parameters": {"position_number": 1, "contract_id": 123}}'
-
-# 生成 PDF
-curl -X POST http://localhost:8080/tools/call \
-  -H "Content-Type: application/json" \
-  -d '{"tool": "floor_plan_generate", "parameters": {"branch_id": 1}}'
-```
+| Compute Engine | `hj-crm-vm` | 後端 VM (us-west1-a) |
+| Cloud Run | `pdf-generator` | PDF 生成服務 |
+| Cloud Storage | `hourjungle-pdfs` | PDF 存儲 |
+| Cloud Storage | `hourjungle-contracts` | 合約檔案 |
