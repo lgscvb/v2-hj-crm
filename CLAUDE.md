@@ -43,13 +43,17 @@ v2-hj-crm/                    ← Monorepo (GitHub: lgscvb/v2-hj-crm)
 # 推送程式碼
 git add . && git commit -m "feat: 描述" && git push
 
-# SSH 到 VM 更新（注意：VM 上資料夾名稱為 hourjungle-crm）
+# SSH 到 VM 更新
 gcloud compute ssh hj-crm-vm --zone=us-west1-a --project=hj-crm-482012 \
-  --command="cd ~/hourjungle-crm && git pull && docker compose restart mcp-server"
+  --command="cd ~/v2-hj-crm && git pull && cd backend && docker-compose down && docker-compose up -d"
 
-# 如需重建 Docker image
+# 只重啟 mcp-server（不重建 image）
 gcloud compute ssh hj-crm-vm --zone=us-west1-a --project=hj-crm-482012 \
-  --command="cd ~/hourjungle-crm && git pull && docker compose build mcp-server && docker compose up -d mcp-server"
+  --command="cd ~/v2-hj-crm/backend && docker-compose restart mcp-server"
+
+# 如需重建 Docker image（程式碼有大改動時）
+gcloud compute ssh hj-crm-vm --zone=us-west1-a --project=hj-crm-482012 \
+  --command="cd ~/v2-hj-crm/backend && docker-compose build mcp-server && docker-compose down && docker-compose up -d"
 ```
 
 ### 前端 (Cloudflare Pages)
