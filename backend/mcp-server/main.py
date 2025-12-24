@@ -1529,6 +1529,103 @@ async def call_tool(request: ToolCallRequest):
 
 
 # ============================================================================
+# Dev Tools (開發者工具 - 僅限開發環境)
+# ============================================================================
+
+class DevCleanupRequest(BaseModel):
+    """測試資料清理請求"""
+    quote_id: int = None
+    contract_id: int = None
+    customer_id: int = None
+    confirm: bool = False  # 安全確認
+
+
+@app.post("/dev/cleanup")
+async def dev_cleanup_test_data(request: DevCleanupRequest):
+    """
+    清理測試資料（開發者工具）
+
+    按正確順序刪除：
+    1. 清除 quote 的 converted_contract_id
+    2. 刪除 payments
+    3. 刪除 contract
+    4. 刪除 quote
+    5. 刪除 customer（如果沒有其他關聯）
+    """
+    if not request.confirm:
+        return {
+            "success": False,
+            "message": "請設定 confirm=true 確認刪除"
+        }
+
+    deleted = []
+    errors = []
+
+    try:
+        # 1. 清除報價單的合約關聯
+        if request.quote_id:
+            try:
+                result = await postgrest_patch(
+                    "quotes",
+                    {"id": f"eq.{request.quote_id}"},
+                    {"converted_contract_id": None}
+                )
+                deleted.append(f"quote {request.quote_id} 關聯已清除")
+            except Exception as e:
+                errors.append(f"清除報價關聯失敗: {e}")
+
+        # 2. 刪除付款記錄
+        if request.contract_id:
+            try:
+                await postgrest_delete("payments", {"contract_id": f"eq.{request.contract_id}"})
+                deleted.append(f"contract {request.contract_id} 的付款記錄已刪除")
+            except Exception as e:
+                errors.append(f"刪除付款記錄失敗: {e}")
+
+            # 3. 刪除合約
+            try:
+                await postgrest_delete("contracts", {"id": f"eq.{request.contract_id}"})
+                deleted.append(f"contract {request.contract_id} 已刪除")
+            except Exception as e:
+                errors.append(f"刪除合約失敗: {e}")
+
+        # 4. 刪除報價單
+        if request.quote_id:
+            try:
+                await postgrest_delete("quotes", {"id": f"eq.{request.quote_id}"})
+                deleted.append(f"quote {request.quote_id} 已刪除")
+            except Exception as e:
+                errors.append(f"刪除報價單失敗: {e}")
+
+        # 5. 嘗試刪除客戶（如有指定且無其他合約）
+        if request.customer_id:
+            try:
+                # 檢查是否有其他合約
+                contracts = await postgrest_get("contracts", {"customer_id": f"eq.{request.customer_id}"})
+                if not contracts:
+                    await postgrest_delete("customers", {"id": f"eq.{request.customer_id}"})
+                    deleted.append(f"customer {request.customer_id} 已刪除")
+                else:
+                    deleted.append(f"customer {request.customer_id} 還有 {len(contracts)} 筆合約，保留")
+            except Exception as e:
+                errors.append(f"刪除客戶失敗: {e}")
+
+        return {
+            "success": len(errors) == 0,
+            "deleted": deleted,
+            "errors": errors if errors else None
+        }
+
+    except Exception as e:
+        logger.error(f"dev_cleanup error: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "deleted": deleted
+        }
+
+
+# ============================================================================
 # MCP Protocol Endpoints (for Claude Desktop)
 # ============================================================================
 

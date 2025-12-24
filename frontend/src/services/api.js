@@ -487,13 +487,17 @@ export const crm = {
 // ============================================================================
 
 export const billing = {
-  // 記錄繳費
-  async recordPayment(paymentId, paymentMethod, reference, paidAt = null) {
+  // 記錄繳費（DDD 版本，需驗證金額）
+  // amount: 實際收款金額（必須等於應付金額）
+  // notes: 備註（如轉帳後五碼）
+  // paymentDate: 付款日期 (YYYY-MM-DD)，預設今天
+  async recordPayment(paymentId, paymentMethod, amount, notes = null, paymentDate = null) {
     return callTool('billing_record_payment', {
       payment_id: paymentId,
       payment_method: paymentMethod,
-      reference,
-      paid_at: paidAt
+      amount,
+      notes,
+      payment_date: paymentDate
     })
   },
 
@@ -815,6 +819,26 @@ export const legalLetter = {
       approved_by: approvedBy,
       tracking_number: trackingNumber,
       notes
+    })
+  }
+}
+
+// ============================================================================
+// AI Learning API (AI 學習功能)
+// ============================================================================
+
+// ============================================================================
+// Dev Tools (開發者工具)
+// ============================================================================
+
+export const devTools = {
+  // 清理測試資料
+  async cleanupTestData({ quoteId, contractId, customerId }) {
+    return api.post('/dev/cleanup', {
+      quote_id: quoteId,
+      contract_id: contractId,
+      customer_id: customerId,
+      confirm: true
     })
   }
 }

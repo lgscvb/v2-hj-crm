@@ -192,8 +192,11 @@ export function useBillingRecordPayment() {
   const addNotification = useStore((state) => state.addNotification)
 
   return useMutation({
-    mutationFn: ({ paymentId, paymentMethod, reference, paidAt }) =>
-      billing.recordPayment(paymentId, paymentMethod, reference, paidAt),
+    // amount: 實際收款金額（必須等於應付金額）
+    // notes: 備註（如轉帳後五碼）
+    // paymentDate: 付款日期 (YYYY-MM-DD)
+    mutationFn: ({ paymentId, paymentMethod, amount, notes, paymentDate }) =>
+      billing.recordPayment(paymentId, paymentMethod, amount, notes, paymentDate),
     onSuccess: (data) => {
       if (data.success) {
         queryClient.invalidateQueries({ queryKey: ['payments-due'] })

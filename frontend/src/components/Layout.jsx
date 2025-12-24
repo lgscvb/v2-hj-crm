@@ -24,7 +24,8 @@ import {
   Scale,
   CalendarDays,
   Map,
-  Package
+  Package,
+  Terminal
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import { useBranches } from '../hooks/useApi'
@@ -44,6 +45,7 @@ const navigation = [
   { name: 'AI 助手', href: '/ai-assistant', icon: Bot },
   { name: 'AI 學習', href: '/ai-learning', icon: Brain },
   { name: '資料驗證', href: '/data-validation', icon: ShieldCheck },
+  { name: '開發工具', href: '/dev-tools', icon: Terminal },
   { name: '潛客管理', href: '/prospects', icon: UserPlus },
   { name: '客戶管理', href: '/customers', icon: Users },
   { name: '價格設定', href: '/settings/service-plans', icon: Package },

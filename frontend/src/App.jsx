@@ -21,6 +21,7 @@ import Prospects from './pages/Prospects'
 import ChurnedCustomers from './pages/ChurnedCustomers'
 import AIAssistant from './pages/AIAssistant'
 import AILearning from './pages/AILearning'
+import DevTools from './pages/DevTools'
 import DataValidation from './pages/DataValidation'
 import Bookings from './pages/Bookings'
 import FloorPlan from './pages/FloorPlan'
@@ -56,6 +57,7 @@ function App() {
         <Route path="prospects" element={<Prospects />} />
         <Route path="ai-assistant" element={<AIAssistant />} />
         <Route path="ai-learning" element={<AILearning />} />
+        <Route path="dev-tools" element={<DevTools />} />
         <Route path="data-validation" element={<DataValidation />} />
         <Route path="bookings" element={<Bookings />} />
         <Route path="floor-plan" element={<FloorPlan />} />
