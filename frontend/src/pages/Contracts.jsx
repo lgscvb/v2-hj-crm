@@ -210,16 +210,22 @@ export default function Contracts() {
   // 終止合約（移動到已結束）mutation
   const terminateContract = useMutation({
     mutationFn: async ({ contractId, reason }) => {
+      // 準備更新資料（只更新狀態，reason 有值才更新 notes）
+      const updateData = { status: 'terminated' }
+      if (reason && reason.trim()) {
+        updateData.notes = `終止原因：${reason.trim()}`
+      }
+
       const response = await fetch(`/api/db/contracts?id=eq.${contractId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: 'terminated',
-          notes: reason ? `終止原因：${reason}` : null
-        })
+        body: JSON.stringify(updateData)
       })
+
       if (!response.ok) {
-        throw new Error('終止失敗')
+        // 嘗試取得錯誤詳情
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || errorData.details || `終止失敗 (${response.status})`)
       }
       return { success: true }
     },
