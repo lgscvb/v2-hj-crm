@@ -104,6 +104,7 @@ export default function Contracts() {
   // 終止合約相關
   const [showTerminateModal, setShowTerminateModal] = useState(false)
   const [terminateReason, setTerminateReason] = useState('')
+  const [terminationType, setTerminationType] = useState('not_renewing') // early, not_renewing, breach
 
   // 編輯合約相關
   const [showEditModal, setShowEditModal] = useState(false)
@@ -263,6 +264,33 @@ export default function Contracts() {
     },
     onError: (error) => {
       addNotification({ type: 'error', message: `更新失敗: ${error.message}` })
+    }
+  })
+
+  // 建立解約案件 mutation
+  const createTerminationCase = useMutation({
+    mutationFn: async (data) => {
+      return await callTool('termination_create_case', data)
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        queryClient.invalidateQueries({ queryKey: ['contracts'] })
+        addNotification({
+          type: 'success',
+          message: result.message || '解約案件已建立'
+        })
+        setShowTerminateModal(false)
+        setSelectedContract(null)
+        setTerminateReason('')
+        setTerminationType('not_renewing')
+        // 導航到解約管理頁面
+        navigate('/terminations')
+      } else {
+        addNotification({ type: 'error', message: result.error || '建立解約案件失敗' })
+      }
+    },
+    onError: (error) => {
+      addNotification({ type: 'error', message: `建立解約案件失敗: ${error.message}` })
     }
   })
 
@@ -1448,49 +1476,13 @@ export default function Contracts() {
           setShowTerminateModal(false)
           setSelectedContract(null)
           setTerminateReason('')
+          setTerminationType('not_renewing')
         }}
         title="終止合約"
-        size="sm"
-        footer={
-          <>
-            <button
-              onClick={() => {
-                setShowTerminateModal(false)
-                setSelectedContract(null)
-                setTerminateReason('')
-              }}
-              className="btn-secondary"
-            >
-              取消
-            </button>
-            <button
-              onClick={handleTerminate}
-              disabled={terminateContract.isPending}
-              className="btn-primary bg-gray-600 hover:bg-gray-700"
-            >
-              {terminateContract.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  處理中...
-                </>
-              ) : (
-                <>
-                  <Archive className="w-4 h-4 mr-2" />
-                  確認終止
-                </>
-              )}
-            </button>
-          </>
-        }
+        size="md"
+        footer={null}
       >
         <div className="space-y-4">
-          {/* 警告訊息 */}
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm text-red-800">
-              終止合約後，合約將移動到「已結束合約」列表。此操作可以在已結束合約頁面中恢復。
-            </p>
-          </div>
-
           {/* 合約摘要 */}
           {selectedContract && (
             <div className="p-4 bg-gray-50 rounded-lg">
@@ -1502,18 +1494,109 @@ export default function Contracts() {
               <p className="text-sm text-gray-600">
                 {selectedContract.start_date} ~ {selectedContract.end_date}
               </p>
+              {selectedContract.deposit > 0 && (
+                <p className="text-sm text-blue-600 mt-1">
+                  押金：${selectedContract.deposit?.toLocaleString()}
+                </p>
+              )}
             </div>
           )}
 
-          <div>
-            <label className="label">終止原因（選填）</label>
-            <textarea
-              value={terminateReason}
-              onChange={(e) => setTerminateReason(e.target.value)}
-              className="input resize-none"
-              rows={2}
-              placeholder="例：客戶提前解約、遷址..."
-            />
+          {/* 兩個選項 */}
+          <div className="space-y-3">
+            {/* 選項 1：開始解約流程（有押金處理） */}
+            <div className="p-4 border-2 border-blue-200 rounded-lg bg-blue-50">
+              <h4 className="font-medium text-blue-900 mb-2">開始解約流程（建議）</h4>
+              <p className="text-sm text-blue-700 mb-3">
+                建立解約案件，追蹤搬遷、公文申請、押金結算等完整流程。適用於需要處理押金退還的客戶。
+              </p>
+
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-blue-800 mb-1">解約類型</label>
+                <select
+                  value={terminationType}
+                  onChange={(e) => setTerminationType(e.target.value)}
+                  className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
+                >
+                  <option value="not_renewing">到期不續約</option>
+                  <option value="early">提前解約</option>
+                  <option value="breach">違約終止</option>
+                </select>
+              </div>
+
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-blue-800 mb-1">備註（選填）</label>
+                <textarea
+                  value={terminateReason}
+                  onChange={(e) => setTerminateReason(e.target.value)}
+                  className="w-full px-3 py-2 border border-blue-300 rounded-lg resize-none"
+                  rows={2}
+                  placeholder="例：客戶搬遷至新址..."
+                />
+              </div>
+
+              <button
+                onClick={() => createTerminationCase.mutate({
+                  contract_id: selectedContract?.id,
+                  termination_type: terminationType,
+                  notes: terminateReason || undefined
+                })}
+                disabled={createTerminationCase.isPending}
+                className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {createTerminationCase.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    處理中...
+                  </>
+                ) : (
+                  <>
+                    <FileX className="w-4 h-4" />
+                    開始解約流程
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* 選項 2：直接終止（測試用） */}
+            <div className="p-4 border border-gray-200 rounded-lg">
+              <h4 className="font-medium text-gray-700 mb-2">直接終止（快速處理）</h4>
+              <p className="text-sm text-gray-500 mb-3">
+                立即將合約標記為已終止。適用於測試資料或不需要押金處理的情況。
+              </p>
+              <button
+                onClick={handleTerminate}
+                disabled={terminateContract.isPending}
+                className="w-full py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {terminateContract.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    處理中...
+                  </>
+                ) : (
+                  <>
+                    <Archive className="w-4 h-4" />
+                    直接終止
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* 取消按鈕 */}
+          <div className="flex justify-center pt-2">
+            <button
+              onClick={() => {
+                setShowTerminateModal(false)
+                setSelectedContract(null)
+                setTerminateReason('')
+                setTerminationType('not_renewing')
+              }}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              取消
+            </button>
           </div>
         </div>
       </Modal>

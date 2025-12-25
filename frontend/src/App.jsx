@@ -27,6 +27,7 @@ import Bookings from './pages/Bookings'
 import FloorPlan from './pages/FloorPlan'
 import ContractCreate from './pages/ContractCreate'
 import ServicePlans from './pages/ServicePlans'
+import Terminations from './pages/Terminations'
 
 function App() {
   return (
@@ -49,6 +50,7 @@ function App() {
         <Route path="payments" element={<Payments />} />
         <Route path="invoices" element={<Invoices />} />
         <Route path="renewals" element={<Renewals />} />
+        <Route path="terminations" element={<Terminations />} />
         <Route path="commissions" element={<Commissions />} />
         <Route path="reports" element={<Reports />} />
         <Route path="quotes" element={<Quotes />} />

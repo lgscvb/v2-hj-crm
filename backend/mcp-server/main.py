@@ -306,6 +306,19 @@ from tools.learning_tools import (
     ai_list_conversations
 )
 
+# DDD Domain Tools - Termination（解約領域）
+from tools.termination_tools import (
+    create_termination_case,
+    update_termination_status,
+    update_termination_checklist,
+    calculate_deposit_settlement,
+    process_refund,
+    get_termination_cases,
+    get_termination_case,
+    cancel_termination_case,
+    set_postgrest_request as set_termination_postgrest
+)
+
 
 # ============================================================================
 # MCP Tool 定義
@@ -890,6 +903,84 @@ MCP_TOOLS = {
         "handler": renewal_list_cases
     },
 
+    # ==========================================================================
+    # DDD Domain Tools - Termination（解約領域）
+    # ==========================================================================
+    "termination_create_case": {
+        "description": "建立解約案件（客戶通知要解約時使用）",
+        "parameters": {
+            "contract_id": {"type": "integer", "description": "合約ID", "required": True},
+            "termination_type": {"type": "string", "description": "解約類型 (early=提前解約/not_renewing=到期不續約/breach=違約終止)", "optional": True},
+            "notice_date": {"type": "string", "description": "客戶通知日期 (YYYY-MM-DD)", "optional": True},
+            "expected_end_date": {"type": "string", "description": "預計搬離日期 (YYYY-MM-DD)", "optional": True},
+            "notes": {"type": "string", "description": "備註", "optional": True}
+        },
+        "handler": create_termination_case
+    },
+    "termination_update_status": {
+        "description": "更新解約案件狀態",
+        "parameters": {
+            "case_id": {"type": "integer", "description": "解約案件ID", "required": True},
+            "status": {"type": "string", "description": "新狀態 (notice_received/moving_out/pending_doc/pending_settlement/completed/cancelled)", "required": True},
+            "notes": {"type": "string", "description": "備註", "optional": True}
+        },
+        "handler": update_termination_status
+    },
+    "termination_update_checklist": {
+        "description": "更新解約案件的 Checklist 項目",
+        "parameters": {
+            "case_id": {"type": "integer", "description": "解約案件ID", "required": True},
+            "item": {"type": "string", "description": "項目 (notice_confirmed/belongings_removed/keys_returned/room_inspected/doc_submitted/doc_approved/settlement_calculated/refund_processed)", "required": True},
+            "value": {"type": "boolean", "description": "是否已完成", "required": True}
+        },
+        "handler": update_termination_checklist
+    },
+    "termination_calculate_settlement": {
+        "description": "計算押金結算（根據公文核准日計算應扣除的天數和金額）",
+        "parameters": {
+            "case_id": {"type": "integer", "description": "解約案件ID", "required": True},
+            "doc_approved_date": {"type": "string", "description": "公文核准日期 (YYYY-MM-DD)", "required": True},
+            "other_deductions": {"type": "number", "description": "其他扣款金額（清潔費、損壞等）", "optional": True},
+            "other_deduction_notes": {"type": "string", "description": "其他扣款說明", "optional": True}
+        },
+        "handler": calculate_deposit_settlement
+    },
+    "termination_process_refund": {
+        "description": "處理押金退還（完成解約流程）",
+        "parameters": {
+            "case_id": {"type": "integer", "description": "解約案件ID", "required": True},
+            "refund_method": {"type": "string", "description": "退款方式 (cash=現金/transfer=匯款/check=支票)", "required": True},
+            "refund_account": {"type": "string", "description": "退款帳戶（匯款時需要）", "optional": True},
+            "refund_receipt": {"type": "string", "description": "收據編號", "optional": True},
+            "notes": {"type": "string", "description": "備註", "optional": True}
+        },
+        "handler": process_refund
+    },
+    "termination_get_cases": {
+        "description": "取得解約案件列表",
+        "parameters": {
+            "branch_id": {"type": "integer", "description": "場館ID", "optional": True},
+            "status": {"type": "string", "description": "狀態過濾 (notice_received/moving_out/pending_doc/pending_settlement/completed/cancelled)", "optional": True},
+            "include_completed": {"type": "boolean", "description": "是否包含已完成的案件", "optional": True}
+        },
+        "handler": get_termination_cases
+    },
+    "termination_get_case": {
+        "description": "取得單一解約案件詳情",
+        "parameters": {
+            "case_id": {"type": "integer", "description": "解約案件ID", "required": True}
+        },
+        "handler": get_termination_case
+    },
+    "termination_cancel_case": {
+        "description": "取消解約案件（客戶反悔決定續租時使用）",
+        "parameters": {
+            "case_id": {"type": "integer", "description": "解約案件ID", "required": True},
+            "reason": {"type": "string", "description": "取消原因", "required": True}
+        },
+        "handler": cancel_termination_case
+    },
+
     # 系統設定工具
     "settings_get": {
         "description": "取得系統設定",
@@ -1426,6 +1517,10 @@ async def lifespan(app: FastAPI):
     # 設置回報工具的 postgrest_request
     set_feedback_postgrest(postgrest_request)
     logger.info("Feedback tools initialized")
+
+    # 設置解約工具的 postgrest_request
+    set_termination_postgrest(postgrest_request)
+    logger.info("Termination tools initialized")
 
     # 啟動排程器
     scheduler.add_job(send_booking_reminders, 'interval', minutes=10)

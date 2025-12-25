@@ -25,7 +25,8 @@ import {
   CalendarDays,
   Map,
   Package,
-  Terminal
+  Terminal,
+  FileX
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import { useBranches } from '../hooks/useApi'
@@ -38,6 +39,7 @@ const navigation = [
   { name: '繳費管理', href: '/payments', icon: CreditCard },
   { name: '發票管理', href: '/invoices', icon: Receipt },
   { name: '續約提醒', href: '/renewals', icon: Bell },
+  { name: '解約管理', href: '/terminations', icon: FileX },
   { name: '會議室預約', href: '/bookings', icon: CalendarDays },
   { name: '平面圖', href: '/floor-plan', icon: Map },
   { name: '佣金管理', href: '/commissions', icon: DollarSign },
