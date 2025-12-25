@@ -75,6 +75,28 @@ services:
     networks:
       - hj-network
 
+  # Brain AI 客服後端
+  brain:
+    build: ../../Brain/backend
+    container_name: brain-backend
+    restart: unless-stopped
+    volumes:
+      - brain_logs:/app/logs
+      - brain_data:/app/data
+    environment:
+      PORT: 8787
+      HOST: 0.0.0.0
+      DATABASE_URL: sqlite+aiosqlite:///./data/brain.db
+      LINE_CHANNEL_ACCESS_TOKEN: ${BRAIN_LINE_CHANNEL_ACCESS_TOKEN}
+      LINE_CHANNEL_SECRET: ${BRAIN_LINE_CHANNEL_SECRET}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      CRM_API_URL: http://mcp-server:8080
+      ENABLE_JUNGLE_INTEGRATION: "true"
+    ports:
+      - "8787:8787"
+    networks:
+      - hj-network
+
   # Nginx 反向代理
   nginx:
     image: nginx:alpine
@@ -83,6 +105,7 @@ services:
     depends_on:
       - postgrest
       - mcp-server
+      - brain
     ports:
       - "80:80"
       - "443:443"
@@ -97,6 +120,8 @@ services:
 
 volumes:
   pg_data:
+  brain_logs:
+  brain_data:
 
 networks:
   hj-network:
