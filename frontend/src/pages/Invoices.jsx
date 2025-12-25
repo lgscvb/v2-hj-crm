@@ -16,7 +16,8 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle,
-  Clock
+  Clock,
+  Trash2
 } from 'lucide-react'
 
 // 發票狀態對應
@@ -41,6 +42,7 @@ export default function Invoices() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showVoidModal, setShowVoidModal] = useState(false)
   const [showAllowanceModal, setShowAllowanceModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState(null)
 
   // 處理 URL 參數（從收款頁面跳轉過來）
@@ -165,6 +167,27 @@ export default function Invoices() {
     }
   })
 
+  // 刪除發票記錄
+  const deleteMutation = useMutation({
+    mutationFn: async (paymentId) => {
+      // 清除發票相關欄位
+      return db.update('payments', paymentId, {
+        invoice_number: null,
+        invoice_date: null,
+        invoice_status: null
+      })
+    },
+    onSuccess: () => {
+      addNotification({ type: 'success', message: '發票記錄已刪除' })
+      queryClient.invalidateQueries(['invoices'])
+      setShowDeleteModal(false)
+      setSelectedPayment(null)
+    },
+    onError: (error) => {
+      addNotification({ type: 'error', message: `刪除失敗：${error.message}` })
+    }
+  })
+
   // 統計數據
   const stats = {
     total: invoices.length,
@@ -274,7 +297,7 @@ export default function Invoices() {
               <Plus className="w-3 h-3 mr-1" />
               開立
             </button>
-          ) : row.invoice_status !== 'voided' && (
+          ) : row.invoice_status !== 'voided' ? (
             <>
               <button
                 onClick={(e) => {
@@ -298,7 +321,30 @@ export default function Invoices() {
                 <Percent className="w-3 h-3 mr-1" />
                 折讓
               </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSelectedPayment(row)
+                  setShowDeleteModal(true)
+                }}
+                className="btn-secondary text-xs py-1 px-2 text-gray-600 hover:bg-gray-100"
+              >
+                <Trash2 className="w-3 h-3 mr-1" />
+                刪除
+              </button>
             </>
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setSelectedPayment(row)
+                setShowDeleteModal(true)
+              }}
+              className="btn-secondary text-xs py-1 px-2 text-gray-600 hover:bg-gray-100"
+            >
+              <Trash2 className="w-3 h-3 mr-1" />
+              刪除
+            </button>
           )}
         </div>
       )
@@ -461,6 +507,19 @@ export default function Invoices() {
           onSubmit={(data) => allowanceMutation.mutate(data)}
           isLoading={allowanceMutation.isPending}
           addNotification={addNotification}
+        />
+      )}
+
+      {/* 刪除確認 Modal */}
+      {showDeleteModal && selectedPayment && (
+        <DeleteInvoiceModal
+          payment={selectedPayment}
+          onClose={() => {
+            setShowDeleteModal(false)
+            setSelectedPayment(null)
+          }}
+          onConfirm={() => deleteMutation.mutate(selectedPayment.id)}
+          isLoading={deleteMutation.isPending}
         />
       )}
     </div>
@@ -737,6 +796,53 @@ function AllowanceModal({ payment, onClose, onSubmit, isLoading, addNotification
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+// 刪除發票 Modal
+function DeleteInvoiceModal({ payment, onClose, onConfirm, isLoading }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+        <h2 className="text-lg font-bold mb-4 text-red-600">刪除發票記錄</h2>
+
+        <div className="mb-4 p-3 bg-red-50 rounded-lg">
+          <p className="text-sm text-red-700">
+            <AlertCircle className="w-4 h-4 inline mr-1" />
+            確定要刪除此發票記錄嗎？
+          </p>
+          {payment.invoice_number && (
+            <p className="text-sm text-gray-600 mt-2">發票號碼：{payment.invoice_number}</p>
+          )}
+          <p className="text-sm text-gray-600">客戶：{payment.customer?.name}</p>
+          <p className="text-sm text-gray-600">金額：${(payment.amount || 0).toLocaleString()}</p>
+        </div>
+
+        <p className="text-sm text-gray-500 mb-4">
+          此操作將清除此筆繳費的發票資訊，繳費記錄本身不會被刪除。
+        </p>
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="btn-secondary">
+            取消
+          </button>
+          <button
+            onClick={onConfirm}
+            className="btn-primary bg-red-600 hover:bg-red-700"
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                刪除中...
+              </>
+            ) : (
+              '確認刪除'
+            )}
+          </button>
+        </div>
       </div>
     </div>
   )
