@@ -4,12 +4,15 @@ import { X } from 'lucide-react'
 
 export default function Modal({
   open,
+  isOpen,  // 支援兩種命名方式
   onClose,
   title,
   children,
   size = 'md',
   footer
 }) {
+  // 兼容 open 和 isOpen 兩種 prop 命名
+  const isVisible = isOpen ?? open ?? false
   const sizeClasses = {
     sm: 'max-w-md',
     md: 'max-w-lg',
@@ -19,7 +22,7 @@ export default function Modal({
   }
 
   return (
-    <Transition appear show={open} as={Fragment}>
+    <Transition appear show={isVisible} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={onClose}>
         <Transition.Child
           as={Fragment}

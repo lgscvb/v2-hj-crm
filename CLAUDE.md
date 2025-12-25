@@ -32,8 +32,18 @@ v2-hj-crm/                    ← Monorepo (GitHub: lgscvb/v2-hj-crm)
 
 | 域名 | 用途 | 部署方式 |
 |------|------|----------|
-| `hj-v2.pages.dev` | CRM 前端 | Cloudflare Pages |
-| `api-v2.yourspce.org` | MCP Server API | Cloudflare Tunnel → GCP VM |
+| `hj-v2.yourspce.org` | **CRM v2 前端（主要）** | CNAME → hj-v2.pages.dev |
+| `hj-v2.pages.dev` | Cloudflare Pages 預設域名 | Cloudflare Pages 自動部署 |
+| `api-v2.yourspce.org` | MCP Server v2 API | Cloudflare Tunnel → GCP VM |
+
+> ⚠️ **注意**：請使用 `hj-v2.yourspce.org`，不要使用 `hj-v2.pages.dev`（預設域名可能會有舊版快取）
+
+### v1 vs v2 系統對照
+
+| 系統 | 前端域名 | API 域名 | 部署位置 |
+|------|----------|----------|----------|
+| **v1（舊）** | `hj.yourspce.org` | `auto.yourspce.org` | GCP VM |
+| **v2（新）** | `hj-v2.yourspce.org` | `api-v2.yourspce.org` | Cloudflare Pages + Tunnel |
 
 ## 快速部署
 
@@ -62,8 +72,11 @@ gcloud compute ssh hj-crm-vm --zone=us-west1-a --project=hj-crm-482012 \
 
 ```bash
 git add . && git commit -m "feat: 描述" && git push
-# Cloudflare Pages 會自動建構並部署到 hj-v2.pages.dev
+# Cloudflare Pages 會自動建構並部署
+# 主要域名：https://hj-v2.yourspce.org
 ```
+
+> 💡 Cloudflare Pages 設定：專案名稱 `hj-v2`，自訂域名已設定 `hj-v2.yourspce.org`
 
 ## 環境變數
 

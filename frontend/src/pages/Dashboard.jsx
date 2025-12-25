@@ -388,10 +388,10 @@ export default function Dashboard() {
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">
-                        {item.customer_name}
+                        {item.company_name || item.customer_name}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {item.branch_name} · {item.payment_period}
+                        {item.company_name ? item.customer_name + ' · ' : ''}{item.branch_name} · {item.payment_period}
                       </p>
                     </div>
                     <div className="text-right mr-3">
@@ -471,10 +471,10 @@ export default function Dashboard() {
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">
-                        {renewal.customer_name}
+                        {renewal.company_name || renewal.customer_name}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {renewal.branch_name} · {renewal.product_type || '虛擬辦公室'}
+                        {renewal.company_name ? renewal.customer_name + ' · ' : ''}{renewal.branch_name}
                       </p>
                     </div>
                     <div className="text-right">
@@ -633,10 +633,10 @@ export default function Dashboard() {
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">
-                        {item.customer_name}
+                        {item.company_name || item.customer_name}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {item.branch_name} · {item.payment_period}
+                        {item.company_name ? item.customer_name + ' · ' : ''}{item.branch_name} · {item.payment_period}
                       </p>
                     </div>
                     <div className="text-right mr-3">
