@@ -12,6 +12,7 @@ import FlexSeatPDF from '../components/pdf/FlexSeatPDF'
 import {
   ArrowLeft,
   Edit2,
+  Pencil,
   User,
   Phone,
   Mail,
@@ -326,6 +327,7 @@ export default function ContractDetail() {
   const [showPayModal, setShowPayModal] = useState(false)
   const [showReminderModal, setShowReminderModal] = useState(false)
   const [showEditCustomerModal, setShowEditCustomerModal] = useState(false)
+  const [showEditContractModal, setShowEditContractModal] = useState(false)
   const [showChecklistPopover, setShowChecklistPopover] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState(null)
   const [generatingPdf, setGeneratingPdf] = useState(false)
@@ -334,6 +336,25 @@ export default function ContractDetail() {
     reference: ''
   })
   const [customerForm, setCustomerForm] = useState({})
+  const [contractForm, setContractForm] = useState({
+    company_name: '',
+    representative_name: '',
+    representative_address: '',
+    id_number: '',
+    company_tax_id: '',
+    phone: '',
+    email: '',
+    branch_id: 1,
+    contract_type: 'virtual_office',
+    start_date: '',
+    end_date: '',
+    original_price: '',
+    monthly_rent: '',
+    deposit_amount: '',
+    payment_cycle: 'monthly',
+    payment_day: 8,
+    position_number: ''
+  })
 
   // 設定 renewal flag (Checklist)
   const setRenewalFlag = useMutation({
@@ -379,6 +400,81 @@ export default function ContractDetail() {
   const handleSaveNotes = (notes) => {
     if (!contract) return
     saveNotes.mutate({ contractId: contract.id, notes })
+  }
+
+  // 更新合約 mutation
+  const updateContract = useMutation({
+    mutationFn: async ({ contractId, data }) => {
+      const response = await fetch(`/api/db/contracts?id=eq.${contractId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || '更新失敗')
+      }
+      return { success: true }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contract', id] })
+      setShowEditContractModal(false)
+      refetch()
+    }
+  })
+
+  // 開啟編輯合約 Modal
+  const startEditContract = () => {
+    if (!contract) return
+    setContractForm({
+      company_name: contract.company_name || customer?.company_name || '',
+      representative_name: contract.representative_name || customer?.name || '',
+      representative_address: contract.representative_address || '',
+      id_number: contract.id_number || '',
+      company_tax_id: contract.company_tax_id || '',
+      phone: contract.phone || customer?.phone || '',
+      email: contract.email || customer?.email || '',
+      branch_id: contract.branch_id || 1,
+      contract_type: contract.contract_type || 'virtual_office',
+      start_date: contract.start_date || '',
+      end_date: contract.end_date || '',
+      original_price: contract.original_price || 3000,
+      monthly_rent: contract.monthly_rent || '',
+      deposit_amount: contract.deposit || '',
+      payment_cycle: contract.payment_cycle || 'monthly',
+      payment_day: contract.payment_day || 8,
+      position_number: contract.position_number || ''
+    })
+    setShowEditContractModal(true)
+  }
+
+  // 儲存合約編輯
+  const handleSaveContract = (e) => {
+    e.preventDefault()
+    if (!contract) return
+
+    updateContract.mutate({
+      contractId: contract.id,
+      data: {
+        company_name: contractForm.company_name || null,
+        representative_name: contractForm.representative_name || null,
+        representative_address: contractForm.representative_address || null,
+        id_number: contractForm.id_number || null,
+        company_tax_id: contractForm.company_tax_id || null,
+        phone: contractForm.phone || null,
+        email: contractForm.email || null,
+        branch_id: parseInt(contractForm.branch_id) || 1,
+        contract_type: contractForm.contract_type,
+        start_date: contractForm.start_date,
+        end_date: contractForm.end_date,
+        original_price: parseFloat(contractForm.original_price) || null,
+        monthly_rent: parseFloat(contractForm.monthly_rent) || null,
+        deposit: parseFloat(contractForm.deposit_amount) || null,
+        payment_cycle: contractForm.payment_cycle,
+        payment_day: parseInt(contractForm.payment_day) || 8,
+        position_number: contractForm.position_number || null
+      }
+    })
   }
 
   const contract = result?.data?.contract
@@ -707,10 +803,21 @@ export default function ContractDetail() {
         <div className="lg:col-span-2 space-y-6">
           {/* 合約資訊 */}
           <div className="card">
-            <h3 className="card-title flex items-center gap-2 mb-4">
-              <FileText className="w-5 h-5 text-primary-500" />
-              合約資訊
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="card-title flex items-center gap-2">
+                <FileText className="w-5 h-5 text-primary-500" />
+                合約資訊
+              </h3>
+              {contract.status !== 'terminated' && contract.status !== 'cancelled' && (
+                <button
+                  onClick={startEditContract}
+                  className="text-gray-400 hover:text-blue-600 transition-colors"
+                  title="編輯合約"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              )}
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <p className="text-xs text-gray-500 mb-1">合約期間</p>
@@ -1091,6 +1198,251 @@ export default function ContractDetail() {
             </button>
           </div>
         </div>
+      </Modal>
+
+      {/* 編輯合約 Modal */}
+      <Modal
+        open={showEditContractModal}
+        onClose={() => setShowEditContractModal(false)}
+        title={`編輯合約 ${contract?.contract_number || ''}`}
+        size="lg"
+      >
+        <form onSubmit={handleSaveContract} className="space-y-6">
+          {/* 承租人資訊（乙方） */}
+          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <h3 className="font-medium text-blue-900 mb-4">承租人資訊（乙方）</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">公司名稱</label>
+                <input
+                  type="text"
+                  value={contractForm.company_name}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, company_name: e.target.value }))}
+                  className="input w-full"
+                  placeholder="公司名稱"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">負責人姓名</label>
+                <input
+                  type="text"
+                  value={contractForm.representative_name}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, representative_name: e.target.value }))}
+                  className="input w-full"
+                  placeholder="負責人姓名"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">負責人地址</label>
+                <input
+                  type="text"
+                  value={contractForm.representative_address}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, representative_address: e.target.value }))}
+                  className="input w-full"
+                  placeholder="戶籍地址"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">身分證號碼</label>
+                <input
+                  type="text"
+                  value={contractForm.id_number}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, id_number: e.target.value }))}
+                  className="input w-full"
+                  placeholder="身分證/居留證號碼"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">公司統編</label>
+                <input
+                  type="text"
+                  value={contractForm.company_tax_id}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, company_tax_id: e.target.value }))}
+                  className="input w-full"
+                  placeholder="8碼統編"
+                  maxLength={8}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">聯絡電話</label>
+                <input
+                  type="text"
+                  value={contractForm.phone}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, phone: e.target.value }))}
+                  className="input w-full"
+                  placeholder="聯絡電話"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+                <input
+                  type="email"
+                  value={contractForm.email}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, email: e.target.value }))}
+                  className="input w-full"
+                  placeholder="電子郵件"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 租賃條件 */}
+          <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+            <h3 className="font-medium text-green-900 mb-4">租賃條件</h3>
+
+            {/* 合約類型 */}
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">合約類型</label>
+                <select
+                  value={contractForm.contract_type}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, contract_type: e.target.value }))}
+                  className="input w-full"
+                >
+                  <option value="virtual_office">營業登記</option>
+                  <option value="coworking_fixed">固定座位</option>
+                  <option value="coworking_flexible">彈性座位</option>
+                  <option value="meeting_room">會議室</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">分館</label>
+                <select
+                  value={contractForm.branch_id}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, branch_id: e.target.value }))}
+                  className="input w-full"
+                >
+                  <option value="1">大忠館</option>
+                  <option value="2">環瑞館</option>
+                </select>
+              </div>
+            </div>
+
+            {/* 合約期間 */}
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">起始日期</label>
+                <input
+                  type="date"
+                  value={contractForm.start_date}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, start_date: e.target.value }))}
+                  className="input w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">結束日期</label>
+                <input
+                  type="date"
+                  value={contractForm.end_date}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, end_date: e.target.value }))}
+                  className="input w-full"
+                />
+              </div>
+            </div>
+
+            {/* 金額 */}
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">定價（原價）</label>
+                <input
+                  type="number"
+                  value={contractForm.original_price}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, original_price: e.target.value }))}
+                  className="input w-full"
+                  placeholder="用於違約金計算"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">月租金額</label>
+                <input
+                  type="number"
+                  value={contractForm.monthly_rent}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, monthly_rent: e.target.value }))}
+                  className="input w-full"
+                  placeholder="實際月租"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">押金</label>
+                <input
+                  type="number"
+                  value={contractForm.deposit_amount}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, deposit_amount: e.target.value }))}
+                  className="input w-full"
+                  placeholder="押金金額"
+                />
+              </div>
+            </div>
+
+            {/* 繳費週期 */}
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">繳費週期</label>
+                <select
+                  value={contractForm.payment_cycle}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, payment_cycle: e.target.value }))}
+                  className="input w-full"
+                >
+                  <option value="monthly">月繳</option>
+                  <option value="quarterly">季繳</option>
+                  <option value="semi_annual">半年繳</option>
+                  <option value="annual">年繳</option>
+                  <option value="biennial">兩年繳</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">繳費日</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={contractForm.payment_day}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, payment_day: e.target.value }))}
+                  className="input w-full"
+                  placeholder="每月幾號"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">座位編號</label>
+                <input
+                  type="text"
+                  value={contractForm.position_number}
+                  onChange={(e) => setContractForm(prev => ({ ...prev, position_number: e.target.value }))}
+                  className="input w-full"
+                  placeholder="如：A1, 15"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 按鈕 */}
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button
+              type="button"
+              onClick={() => setShowEditContractModal(false)}
+              className="btn-secondary"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={updateContract.isPending}
+              className="btn-primary"
+            >
+              {updateContract.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  更新中...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  儲存變更
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </Modal>
     </div>
   )

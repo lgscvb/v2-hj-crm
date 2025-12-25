@@ -152,10 +152,11 @@ async def invoice_create(
     order_id = f"P{payment_id}_{timestamp}"  # 訂單編號不可重複
 
     # 計算稅額（5%營業稅）
-    # 總金額 = 銷售額 + 稅額，稅額 = 總金額 / 1.05 * 0.05
+    # 台灣發票計算：未稅金額 = 總金額 / 1.05（無條件捨去），稅額 = 總金額 - 未稅金額
+    import math
     total_amount = int(amount)
-    sales_amount = round(total_amount / 1.05)  # 未稅金額
-    tax_amount = total_amount - sales_amount   # 稅額
+    sales_amount = math.floor(total_amount / 1.05)  # 未稅金額（無條件捨去）
+    tax_amount = total_amount - sales_amount        # 稅額 = 含稅 - 未稅
 
     # 發票資料結構
     invoice_data = {
