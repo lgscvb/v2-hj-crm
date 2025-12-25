@@ -84,7 +84,7 @@ services:
       - brain_logs:/app/logs
       - brain_data:/app/data
     environment:
-      PORT: 8787
+      PORT: 8000
       HOST: 0.0.0.0
       DATABASE_URL: sqlite+aiosqlite:///./data/brain.db
       LINE_CHANNEL_ACCESS_TOKEN: ${BRAIN_LINE_CHANNEL_ACCESS_TOKEN}
@@ -93,7 +93,7 @@ services:
       CRM_API_URL: http://mcp-server:8080
       ENABLE_JUNGLE_INTEGRATION: "true"
     ports:
-      - "8787:8787"
+      - "8000:8000"
     networks:
       - hj-network
 
