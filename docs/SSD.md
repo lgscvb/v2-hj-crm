@@ -1,8 +1,14 @@
 # System Sequence Diagram (SSD)
 
 > 系統序列圖 - 定義 API 互動規格
-> Version: 1.2
-> Last Updated: 2024-12-22
+> Version: 1.4
+> Last Updated: 2024-12-25
+>
+> **v1.4 變更**：
+> - 新增 Customer Domain（客戶管理）
+> - 新增 Booking Domain（會議室預約）
+> - 新增 Quote Domain（報價單管理）
+> - 新增 LegalLetter Domain（存證信函）
 >
 > **v1.3 變更**：
 > - 新增 Termination Domain（解約流程管理）
@@ -50,6 +56,21 @@
    - 5.4 CalculateSettlement
    - 5.5 ProcessRefund
    - 5.6 CancelTermination
+6. [Customer Domain](#6-customer-domain)
+   - 6.1 CreateCustomer
+   - 6.2 UpdateCustomer
+   - 6.3 LinkLineUser
+7. [Booking Domain](#7-booking-domain)
+   - 7.1 CreateBooking
+   - 7.2 CancelBooking
+   - 7.3 CheckInBooking
+8. [Quote Domain](#8-quote-domain)
+   - 8.1 CreateQuote
+   - 8.2 SendQuote
+   - 8.3 ConvertQuoteToContract
+9. [LegalLetter Domain](#9-legalletter-domain)
+   - 9.1 CreateLegalLetter
+   - 9.2 SendLegalLetter
 
 ---
 
@@ -1029,9 +1050,401 @@ sequenceDiagram
 
 ---
 
-## 6. 查詢 API 彙整
+## 6. Customer Domain
 
-### 5.1 PostgREST 直接查詢
+### 6.1 CreateCustomer（建立客戶）
+
+```mermaid
+sequenceDiagram
+    participant U as 櫃台人員
+    participant FE as Frontend
+    participant API as MCP Server
+    participant DB as PostgreSQL
+
+    U->>FE: 點擊「新增客戶」
+    FE->>FE: 開啟新增 Modal
+
+    U->>FE: 填寫客戶資料
+    Note over U,FE: name, phone, email,<br/>company_name, tax_id, address
+
+    FE->>API: POST /tools/call
+    Note over FE,API: { name: "customer_create",<br/>arguments: { name, phone, email, ... } }
+
+    API->>DB: SELECT * FROM customers WHERE phone = ? OR email = ?
+
+    alt 電話或 Email 重複
+        API-->>FE: 409 { error: "客戶已存在", code: "DUPLICATE_CUSTOMER" }
+    else 可建立
+        API->>DB: INSERT INTO customers (name, phone, email, ...)
+        API-->>FE: 200 { success: true, customer_id: 123 }
+        FE-->>U: 關閉 Modal，刷新列表
+    end
+```
+
+---
+
+### 6.2 UpdateCustomer（更新客戶）
+
+```mermaid
+sequenceDiagram
+    participant U as 櫃台人員
+    participant FE as Frontend
+    participant API as PostgREST
+    participant DB as PostgreSQL
+
+    U->>FE: 點擊「編輯」按鈕
+    FE->>FE: 開啟編輯 Modal，載入現有資料
+
+    U->>FE: 修改客戶資料
+    FE->>API: PATCH /api/db/customers?id=eq.{id}
+    Note over FE,API: { name, phone, email, company_name, tax_id, address }
+
+    API->>DB: UPDATE customers SET ... WHERE id = ?
+    API-->>FE: 200 (更新成功)
+    FE-->>U: 關閉 Modal，刷新列表
+```
+
+---
+
+### 6.3 LinkLineUser（綁定 LINE）
+
+```mermaid
+sequenceDiagram
+    participant C as 客戶
+    participant LINE as LINE App
+    participant API as MCP Server
+    participant DB as PostgreSQL
+
+    Note over C,DB: 客戶收到館方訊息，點擊「綁定帳號」
+
+    C->>LINE: 點擊 Flex Message 中的綁定按鈕
+    LINE->>API: GET /line/liff/bind?token={token}
+
+    API->>API: 驗證 LIFF token
+    API->>DB: SELECT line_user_id FROM LIFF context
+
+    API->>FE: 返回綁定頁面
+    C->>FE: 輸入手機號碼驗證
+    FE->>API: POST /tools/call
+    Note over FE,API: { name: "customer_link_line",<br/>arguments: { phone, line_user_id } }
+
+    API->>DB: SELECT * FROM customers WHERE phone = ?
+
+    alt 客戶不存在
+        API-->>FE: 404 { error: "找不到此手機號碼的客戶" }
+    else 已綁定其他帳號
+        API-->>FE: 409 { error: "此 LINE 帳號已綁定其他客戶" }
+    else 可綁定
+        API->>DB: UPDATE customers SET line_user_id = ? WHERE id = ?
+        API-->>FE: 200 { success: true }
+        FE-->>C: 顯示綁定成功
+    end
+```
+
+---
+
+## 7. Booking Domain
+
+### 7.1 CreateBooking（建立會議室預約）
+
+```mermaid
+sequenceDiagram
+    participant U as 使用者
+    participant FE as Frontend
+    participant API as MCP Server
+    participant DB as PostgreSQL
+
+    U->>FE: 選擇日期、時段、會議室
+    FE->>FE: 顯示可用時段
+
+    U->>FE: 確認預約
+    FE->>API: POST /tools/call
+    Note over FE,API: { name: "booking_create",<br/>arguments: { resource_id, date, start_time, end_time, customer_id, notes } }
+
+    API->>DB: SELECT * FROM bookings<br/>WHERE resource_id = ?<br/>AND date = ?<br/>AND (start_time, end_time) OVERLAPS (?, ?)
+
+    alt 時段已被預約
+        API-->>FE: 409 { error: "此時段已被預約", code: "TIME_CONFLICT" }
+    else 可預約
+        API->>DB: INSERT INTO bookings (<br/>resource_id, customer_id, date,<br/>start_time, end_time, status='confirmed'<br/>)
+
+        API-->>FE: 200 { success: true, booking_id: 456 }
+        FE-->>U: 顯示預約成功
+    end
+```
+
+**預約時段衝突檢查**
+
+```sql
+-- 檢查時段是否重疊
+SELECT EXISTS (
+    SELECT 1 FROM bookings
+    WHERE resource_id = $1
+    AND date = $2
+    AND status NOT IN ('cancelled')
+    AND (start_time, end_time) OVERLAPS ($3, $4)
+)
+```
+
+---
+
+### 7.2 CancelBooking（取消預約）
+
+```mermaid
+sequenceDiagram
+    participant U as 使用者
+    participant FE as Frontend
+    participant API as MCP Server
+    participant DB as PostgreSQL
+
+    U->>FE: 點擊「取消預約」
+    FE->>FE: 開啟確認 Modal
+
+    U->>FE: 確認取消
+    FE->>API: POST /tools/call
+    Note over FE,API: { name: "booking_cancel",<br/>arguments: { booking_id, reason } }
+
+    API->>DB: SELECT * FROM bookings WHERE id = ?
+
+    alt 預約已完成或已取消
+        API-->>FE: 400 { error: "無法取消此預約" }
+    else 可取消
+        API->>DB: UPDATE bookings SET<br/>status='cancelled',<br/>cancelled_at=NOW(),<br/>cancel_reason=?
+
+        API-->>FE: 200 { success: true }
+        FE-->>U: 更新列表
+    end
+```
+
+---
+
+### 7.3 CheckInBooking（預約報到）
+
+```mermaid
+sequenceDiagram
+    participant U as 櫃台人員
+    participant FE as Frontend
+    participant API as MCP Server
+    participant DB as PostgreSQL
+
+    U->>FE: 點擊「報到」按鈕
+    FE->>API: POST /tools/call
+    Note over FE,API: { name: "booking_checkin",<br/>arguments: { booking_id } }
+
+    API->>DB: SELECT * FROM bookings WHERE id = ?
+
+    alt 預約狀態不正確
+        API-->>FE: 400 { error: "無法報到此預約" }
+    else 可報到
+        API->>DB: UPDATE bookings SET<br/>status='checked_in',<br/>checked_in_at=NOW()
+
+        API-->>FE: 200 { success: true, checked_in_at: "..." }
+        FE-->>U: 更新狀態顯示
+    end
+```
+
+---
+
+## 8. Quote Domain
+
+### 8.1 CreateQuote（建立報價單）
+
+```mermaid
+sequenceDiagram
+    participant U as 業務人員
+    participant FE as Frontend
+    participant API as MCP Server
+    participant DB as PostgreSQL
+
+    U->>FE: 點擊「新增報價」
+    FE->>FE: 開啟報價表單
+
+    U->>FE: 填寫報價資訊
+    Note over U,FE: prospect_id, service_plan_id,<br/>resource_id, start_date, discount, notes
+
+    FE->>API: POST /tools/call
+    Note over FE,API: { name: "quote_create",<br/>arguments: { prospect_id, service_plan_id, ... } }
+
+    API->>DB: SELECT * FROM service_plans WHERE id = ?
+    API->>API: 計算報價金額（含折扣）
+
+    API->>DB: INSERT INTO quotes (<br/>quote_number, prospect_id, service_plan_id,<br/>monthly_fee, discount, final_price,<br/>valid_until, status='draft'<br/>)
+    Note over API,DB: quote_number = 'HJ-Q-' + YYYYMM + 序號
+
+    API-->>FE: 200 { success: true, quote_id: 789, quote_number: "HJ-Q-202412-001" }
+    FE-->>U: 跳轉到報價詳情頁
+```
+
+---
+
+### 8.2 SendQuote（發送報價單）
+
+```mermaid
+sequenceDiagram
+    participant U as 業務人員
+    participant FE as Frontend
+    participant API as MCP Server
+    participant DB as PostgreSQL
+    participant LINE as LINE API
+
+    U->>FE: 點擊「發送報價」
+    FE->>API: POST /tools/call
+    Note over FE,API: { name: "quote_send",<br/>arguments: { quote_id } }
+
+    API->>DB: SELECT q.*, p.line_user_id, p.email<br/>FROM quotes q JOIN prospects p ...
+
+    alt LINE 已綁定
+        API->>LINE: POST /v2/bot/message/push
+        Note over API,LINE: Flex Message 含報價詳情 + 公開連結
+    else 有 Email
+        API->>API: 發送 Email（含公開連結）
+    else 無聯絡方式
+        API-->>FE: 400 { error: "此潛在客戶無可用的聯絡方式" }
+    end
+
+    API->>DB: UPDATE quotes SET<br/>status='sent',<br/>sent_at=NOW()
+
+    API-->>FE: 200 { success: true, public_url: "..." }
+    FE-->>U: 顯示發送成功 + 公開連結
+```
+
+**公開連結格式**：`https://hj.yourspce.org/quote/{quote_number}`
+
+---
+
+### 8.3 ConvertQuoteToContract（報價轉合約）
+
+```mermaid
+sequenceDiagram
+    participant U as 業務人員
+    participant FE as Frontend
+    participant API as MCP Server
+    participant DB as PostgreSQL
+
+    U->>FE: 點擊「轉為合約」
+    FE->>FE: 開啟確認 Modal
+
+    U->>FE: 確認轉換
+    FE->>API: POST /tools/call
+    Note over FE,API: { name: "quote_convert",<br/>arguments: { quote_id } }
+
+    API->>DB: SELECT * FROM quotes WHERE id = ?
+
+    alt 報價已過期
+        API-->>FE: 400 { error: "報價已過期", code: "QUOTE_EXPIRED" }
+    else 已有合約
+        API-->>FE: 400 { error: "此報價已轉換為合約" }
+    else 可轉換
+        API->>DB: BEGIN TRANSACTION
+
+        API->>DB: SELECT * FROM prospects WHERE id = quote.prospect_id
+
+        alt 客戶不存在
+            API->>DB: INSERT INTO customers (...) -- 從 prospect 建立
+        end
+
+        API->>DB: INSERT INTO contracts (<br/>customer_id, service_plan_id, resource_id,<br/>monthly_fee, start_date, end_date,<br/>status='active'<br/>)
+        Note over API,DB: 從 quote 複製價格方案資訊
+
+        API->>DB: UPDATE quotes SET<br/>status='converted',<br/>converted_at=NOW(),<br/>contract_id=?
+
+        API->>DB: UPDATE prospects SET status='converted'
+
+        API->>DB: COMMIT
+        API-->>FE: 200 { success: true, contract_id: 123 }
+        FE-->>U: 跳轉到合約詳情頁
+    end
+```
+
+---
+
+## 9. LegalLetter Domain
+
+### 9.1 CreateLegalLetter（建立存證信函）
+
+```mermaid
+sequenceDiagram
+    participant U as 櫃台人員
+    participant FE as Frontend
+    participant API as MCP Server
+    participant DB as PostgreSQL
+
+    U->>FE: 點擊「建立存證信函」
+    FE->>FE: 開啟建立 Modal
+
+    U->>FE: 選擇合約/客戶、填寫內容
+    Note over U,FE: contract_id, letter_type,<br/>content, send_date
+
+    FE->>API: POST /tools/call
+    Note over FE,API: { name: "legal_letter_create",<br/>arguments: { contract_id, letter_type, content } }
+
+    API->>DB: SELECT * FROM contracts c<br/>JOIN customers cust ON ...
+
+    API->>API: 生成存證信函編號
+    Note over API: letter_number = 'LL-' + YYYYMMDD + 序號
+
+    API->>DB: INSERT INTO legal_letters (<br/>letter_number, contract_id, customer_id,<br/>letter_type, content, status='draft'<br/>)
+
+    API-->>FE: 200 { success: true, letter_id: 101, letter_number: "LL-20241225-001" }
+    FE-->>U: 顯示建立成功
+```
+
+**存證信函類型**
+
+| letter_type | 說明 |
+|-------------|------|
+| payment_notice | 催繳通知 |
+| termination_warning | 解約警告 |
+| final_notice | 最後通牒 |
+| legal_action | 法律行動預告 |
+
+---
+
+### 9.2 SendLegalLetter（發送存證信函）
+
+```mermaid
+sequenceDiagram
+    participant U as 櫃台人員
+    participant FE as Frontend
+    participant API as MCP Server
+    participant DB as PostgreSQL
+    participant PDF as PDF Generator
+    participant MAIL as 郵寄服務
+
+    U->>FE: 點擊「發送」
+    FE->>FE: 開啟確認 Modal
+
+    U->>FE: 選擇發送方式（電子/郵寄）
+    FE->>API: POST /tools/call
+    Note over FE,API: { name: "legal_letter_send",<br/>arguments: { letter_id, send_method } }
+
+    API->>DB: SELECT * FROM legal_letters WHERE id = ?
+
+    alt 已發送
+        API-->>FE: 400 { error: "此存證信函已發送" }
+    else 可發送
+        API->>PDF: 生成 PDF 檔案
+        PDF-->>API: PDF URL
+
+        API->>DB: UPDATE legal_letters SET<br/>pdf_url=?,<br/>status='sent',<br/>sent_at=NOW(),<br/>send_method=?
+
+        API->>DB: INSERT INTO notification_logs (<br/>type='legal_letter',<br/>reference_id=letter_id<br/>)
+
+        alt 郵寄
+            API->>MAIL: 觸發郵寄流程
+            Note over API,MAIL: 記錄郵寄追蹤號
+        end
+
+        API-->>FE: 200 { success: true, pdf_url: "..." }
+        FE-->>U: 顯示發送成功 + PDF 連結
+    end
+```
+
+---
+
+## 10. 查詢 API 彙整
+
+### 10.1 PostgREST 直接查詢
 
 | 用途 | Endpoint | 說明 |
 |------|----------|------|
@@ -1042,7 +1455,7 @@ sequenceDiagram
 | 分館營收 | `GET /api/db/v_branch_revenue` | View 彙整各分館數據 |
 | 合約詳情 | `GET /api/db/contracts?id=eq.{id}&select=*,customer:customers(*)` | 含關聯 |
 
-### 5.2 MCP Tools 命令
+### 10.2 MCP Tools 命令
 
 | Domain | Tool Name | 說明 |
 |--------|-----------|------|
@@ -1061,14 +1474,31 @@ sequenceDiagram
 | Contract | `contract_terminate` | 終止合約（payments 標記 cancelled） |
 | Invoice | `invoice_issue` | 開立發票 |
 | Invoice | `invoice_void` | 作廢發票 |
+| Termination | `termination_create_case` | 建立解約案件 |
+| Termination | `termination_update_status` | 更新解約狀態 |
+| Termination | `termination_update_checklist` | 更新 Checklist |
+| Termination | `termination_calculate_settlement` | 計算押金結算 |
+| Termination | `termination_process_refund` | 處理退款 |
+| Termination | `termination_cancel` | 取消解約 |
+| Customer | `customer_create` | 建立客戶 |
+| Customer | `customer_link_line` | 綁定 LINE |
+| Booking | `booking_create` | 建立預約 |
+| Booking | `booking_cancel` | 取消預約 |
+| Booking | `booking_checkin` | 預約報到 |
+| Quote | `quote_create` | 建立報價單 |
+| Quote | `quote_send` | 發送報價單 |
+| Quote | `quote_convert` | 報價轉合約 |
+| LegalLetter | `legal_letter_create` | 建立存證信函 |
+| LegalLetter | `legal_letter_send` | 發送存證信函 |
 
-> **v1.1 變更**：
-> - 移除 `line_send_*` 系列，收斂到 domain commands
+> **設計原則**：
 > - 前端不需知道通知管道（LINE/SMS/Email），由後端決定
+> - 所有狀態變更透過 MCP Tools，不直接 PATCH 資料庫
+> - 簡單的 CRUD 操作可使用 PostgREST 直接查詢
 
 ---
 
-## 6. 錯誤碼定義
+## 11. 錯誤碼定義
 
 | Code | HTTP Status | 說明 |
 |------|-------------|------|
