@@ -24,7 +24,9 @@ import {
   Scale,
   Check,
   X,
-  Loader2
+  Loader2,
+  XCircle,
+  ArrowRight
 } from 'lucide-react'
 
 // ============================================================================
@@ -264,6 +266,7 @@ export default function Renewals() {
   const navigate = useNavigate()
   const [showReminderModal, setShowReminderModal] = useState(false)
   const [showChecklistModal, setShowChecklistModal] = useState(false)
+  const [showNotRenewModal, setShowNotRenewModal] = useState(false)
   const [selectedContract, setSelectedContract] = useState(null)
   const [statusFilter, setStatusFilter] = useState('all')
   const [branchFilter, setBranchFilter] = useState('')
@@ -271,6 +274,7 @@ export default function Renewals() {
   const [showColumnPicker, setShowColumnPicker] = useState(false)
   const [reminderText, setReminderText] = useState('')
   const [renewalNotes, setRenewalNotes] = useState('')
+  const [notRenewNotes, setNotRenewNotes] = useState('')
   const queryClient = useQueryClient()
 
   // 初始化欄位顯示狀態
@@ -333,6 +337,27 @@ export default function Renewals() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['renewal-reminders'] })
+    }
+  })
+
+  // 建立解約案件（客戶表示不續約）
+  const createTerminationCase = useMutation({
+    mutationFn: async ({ contractId, notes }) => {
+      return callTool('termination_create_case', {
+        contract_id: contractId,
+        termination_type: 'not_renewing',
+        notice_date: new Date().toISOString().split('T')[0],
+        notes: notes || '客戶於續約流程中表示不續約'
+      })
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        setShowNotRenewModal(false)
+        setShowChecklistModal(false)
+        setSelectedContract(null)
+        setNotRenewNotes('')
+        navigate('/terminations')
+      }
     }
   })
 
@@ -999,6 +1024,21 @@ export default function Renewals() {
               </div>
             </div>
 
+            {/* 不續約按鈕 */}
+            <div className="pt-4 border-t">
+              <button
+                onClick={() => setShowNotRenewModal(true)}
+                className="w-full py-3 px-4 bg-red-50 border border-red-200 rounded-lg text-red-700 hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
+              >
+                <XCircle className="w-5 h-5" />
+                客戶表示不續約
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </button>
+              <p className="text-xs text-gray-500 text-center mt-2">
+                將建立解約案件並進入解約流程
+              </p>
+            </div>
+
             {/* 時間軸 */}
             {(selectedContract.renewal_notified_at ||
               selectedContract.renewal_confirmed_at ||
@@ -1032,6 +1072,103 @@ export default function Renewals() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* 不續約確認 Modal */}
+      <Modal
+        open={showNotRenewModal}
+        onClose={() => {
+          setShowNotRenewModal(false)
+          setNotRenewNotes('')
+        }}
+        title="確認不續約"
+        size="md"
+        footer={
+          <>
+            <button
+              onClick={() => {
+                setShowNotRenewModal(false)
+                setNotRenewNotes('')
+              }}
+              className="btn-secondary"
+            >
+              取消
+            </button>
+            <button
+              onClick={() => {
+                if (!selectedContract) return
+                createTerminationCase.mutate({
+                  contractId: selectedContract.id,
+                  notes: notRenewNotes
+                })
+              }}
+              disabled={createTerminationCase.isPending}
+              className="btn-danger"
+            >
+              {createTerminationCase.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  處理中...
+                </>
+              ) : (
+                <>
+                  <XCircle className="w-4 h-4 mr-2" />
+                  確認不續約，開始解約流程
+                </>
+              )}
+            </button>
+          </>
+        }
+      >
+        {selectedContract && (
+          <div className="space-y-4">
+            <div className="p-4 bg-red-50 rounded-lg border border-red-100">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-red-800">
+                    您確定要將此合約標記為「不續約」嗎？
+                  </p>
+                  <p className="text-sm text-red-600 mt-1">
+                    系統將建立解約案件，並開始解約流程（含稅籍遷出、押金結算等）
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <p className="font-medium">{selectedContract.customer_name}</p>
+              {selectedContract.company_name && (
+                <p className="text-sm text-gray-500">{selectedContract.company_name}</p>
+              )}
+              <p className="text-sm text-gray-500 mt-1">
+                合約 {selectedContract.contract_number} | {selectedContract.branch_name}
+              </p>
+              <div className="flex items-center gap-4 mt-2 text-sm">
+                <span>到期日：{selectedContract.end_date}</span>
+                <span>押金：${(selectedContract.deposit || 0).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                備註（選填）
+              </label>
+              <textarea
+                value={notRenewNotes}
+                onChange={(e) => setNotRenewNotes(e.target.value)}
+                placeholder="記錄客戶不續約的原因..."
+                className="input w-full h-24 resize-none"
+              />
+            </div>
+
+            {createTerminationCase.isError && (
+              <div className="p-3 bg-red-100 border border-red-200 rounded-lg text-red-700 text-sm">
+                建立解約案件失敗：{createTerminationCase.error?.message || '未知錯誤'}
               </div>
             )}
           </div>

@@ -30,7 +30,8 @@ import {
   Plus,
   Loader2,
   Trash2,
-  Gift
+  Gift,
+  Pencil
 } from 'lucide-react'
 import api from '../services/api'
 
@@ -91,6 +92,17 @@ export default function Payments() {
   const [waivingPayment, setWaivingPayment] = useState(null)
   const [waiveLoading, setWaiveLoading] = useState(false)
   const [waiveNotes, setWaiveNotes] = useState('')
+
+  // 編輯相關狀態
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingPayment, setEditingPayment] = useState(null)
+  const [editLoading, setEditLoading] = useState(false)
+  const [editForm, setEditForm] = useState({
+    amount: '',
+    due_date: '',
+    payment_period: '',
+    notes: ''
+  })
 
   // 生成待繳記錄相關狀態
   const [showGenerateModal, setShowGenerateModal] = useState(false)
@@ -243,6 +255,44 @@ export default function Payments() {
     }
   }
 
+  // 開啟編輯 Modal
+  const openEditModal = (payment) => {
+    setEditingPayment(payment)
+    setEditForm({
+      amount: payment.amount || payment.total_due || '',
+      due_date: payment.due_date || '',
+      payment_period: payment.payment_period || '',
+      notes: payment.notes || ''
+    })
+    setShowEditModal(true)
+  }
+
+  // 編輯繳費記錄
+  const handleEditPayment = async () => {
+    if (!editingPayment) return
+    setEditLoading(true)
+    try {
+      await api.patch(`/api/db/payments?id=eq.${editingPayment.id}`, {
+        amount: parseFloat(editForm.amount) || editingPayment.amount,
+        due_date: editForm.due_date || editingPayment.due_date,
+        payment_period: editForm.payment_period || editingPayment.payment_period,
+        notes: editForm.notes
+      })
+      setShowEditModal(false)
+      setEditingPayment(null)
+      setEditForm({ amount: '', due_date: '', payment_period: '', notes: '' })
+      // 重新整理所有列表
+      refetchDue()
+      refetchOverdue()
+      refetchPaid()
+    } catch (error) {
+      console.error('編輯失敗:', error)
+      alert('編輯失敗：' + (error.response?.data?.message || error.message))
+    } finally {
+      setEditLoading(false)
+    }
+  }
+
   // 生成待繳記錄
   const handleGeneratePayments = async () => {
     setGenerating(true)
@@ -357,6 +407,16 @@ export default function Payments() {
               <Send className="w-4 h-4" />
             </button>
           )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              openEditModal(row)
+            }}
+            className="p-1.5 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+            title="編輯"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
           <button
             onClick={(e) => {
               e.stopPropagation()
@@ -509,6 +569,16 @@ export default function Payments() {
           <button
             onClick={(e) => {
               e.stopPropagation()
+              openEditModal(row)
+            }}
+            className="p-1.5 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+            title="編輯"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
               setWaivingPayment(row)
               setShowWaiveModal(true)
             }}
@@ -611,6 +681,16 @@ export default function Payments() {
             title="撤銷繳費"
           >
             <Undo2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              openEditModal(row)
+            }}
+            className="p-1.5 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+            title="編輯"
+          >
+            <Pencil className="w-4 h-4" />
           </button>
           <button
             onClick={(e) => {
@@ -1337,6 +1417,104 @@ export default function Payments() {
                 onChange={(e) => setWaiveNotes(e.target.value)}
                 placeholder="例：10月免收、減免優惠"
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* 編輯繳費記錄 Modal */}
+      <Modal
+        open={showEditModal}
+        onClose={() => {
+          if (!editLoading) {
+            setShowEditModal(false)
+            setEditingPayment(null)
+            setEditForm({ amount: '', due_date: '', payment_period: '', notes: '' })
+          }
+        }}
+        title="編輯繳費記錄"
+        size="sm"
+        footer={
+          <>
+            <button
+              onClick={() => {
+                setShowEditModal(false)
+                setEditingPayment(null)
+                setEditForm({ amount: '', due_date: '', payment_period: '', notes: '' })
+              }}
+              disabled={editLoading}
+              className="btn-secondary"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleEditPayment}
+              disabled={editLoading}
+              className="btn-primary"
+            >
+              <Pencil className="w-4 h-4 mr-2" />
+              {editLoading ? '儲存中...' : '儲存變更'}
+            </button>
+          </>
+        }
+      >
+        {editingPayment && (
+          <div className="space-y-4">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <p className="font-medium">
+                {editingPayment.customer_name || editingPayment.customer?.name || '未知客戶'}
+              </p>
+              <p className="text-sm text-gray-500">
+                {editingPayment.branch_name || editingPayment.branch?.name || '-'}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="edit-amount" className="label">金額</label>
+                <input
+                  id="edit-amount"
+                  type="number"
+                  value={editForm.amount}
+                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                  className="input"
+                  placeholder="輸入金額"
+                />
+              </div>
+              <div>
+                <label htmlFor="edit-due-date" className="label">到期日</label>
+                <input
+                  id="edit-due-date"
+                  type="date"
+                  value={editForm.due_date}
+                  onChange={(e) => setEditForm({ ...editForm, due_date: e.target.value })}
+                  className="input"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="edit-payment-period" className="label">期別</label>
+              <input
+                id="edit-payment-period"
+                type="text"
+                value={editForm.payment_period}
+                onChange={(e) => setEditForm({ ...editForm, payment_period: e.target.value })}
+                className="input"
+                placeholder="例：2024-12"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-notes" className="label">備註</label>
+              <textarea
+                id="edit-notes"
+                value={editForm.notes}
+                onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                rows={2}
+                className="input resize-none"
+                placeholder="備註說明（選填）"
               />
             </div>
           </div>

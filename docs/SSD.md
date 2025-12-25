@@ -4,6 +4,10 @@
 > Version: 1.2
 > Last Updated: 2024-12-22
 >
+> **v1.3 變更**：
+> - 新增 Termination Domain（解約流程管理）
+> - 新增 7 個 termination_* MCP tools
+>
 > **v1.2 變更**：
 > - WaivePayment Approve 失敗改用 409 Conflict
 > - IssueInvoice 存 contract_id，用 payment_invoices 關聯表
@@ -39,6 +43,13 @@
 4. [Invoice Domain](#4-invoice-domain)
    - 4.1 IssueInvoice
    - 4.2 VoidInvoice
+5. [Termination Domain](#5-termination-domain)
+   - 5.1 CreateTerminationCase
+   - 5.2 UpdateTerminationStatus
+   - 5.3 UpdateChecklist
+   - 5.4 CalculateSettlement
+   - 5.5 ProcessRefund
+   - 5.6 CancelTermination
 
 ---
 
@@ -758,7 +769,267 @@ sequenceDiagram
 
 ---
 
-## 5. 查詢 API 彙整
+## 5. Termination Domain
+
+### 5.1 CreateTerminationCase（建立解約案件）
+
+```mermaid
+sequenceDiagram
+    participant U as 櫃台人員
+    participant FE as Frontend
+    participant API as MCP Server
+    participant DB as PostgreSQL
+
+    U->>FE: 在合約列表點擊「解約」
+    FE->>FE: 開啟解約確認 Modal
+    U->>FE: 選擇解約類型、填寫通知日期
+
+    FE->>API: POST /tools/call
+    Note over FE,API: { name: "termination_create_case",<br/>arguments: { contract_id, termination_type, notice_date, notes } }
+
+    API->>DB: SELECT * FROM contracts WHERE id = ?
+    DB-->>API: Contract (status: 'active')
+
+    alt 合約非 active
+        API-->>FE: 400 { error: "只有生效中的合約可以解約" }
+    else 已有進行中解約
+        API->>DB: SELECT * FROM termination_cases WHERE contract_id = ? AND status NOT IN ('completed', 'cancelled')
+        API-->>FE: 400 { error: "此合約已有進行中的解約案件" }
+    else 可建立
+        API->>DB: BEGIN TRANSACTION
+
+        API->>DB: INSERT INTO termination_cases (<br/>contract_id, termination_type, status='notice_received',<br/>notice_date, deposit_amount, daily_rate, checklist, ...<br/>)
+        Note over API,DB: 自動計算 daily_rate = monthly_rent / 30<br/>自動設定 deposit_amount 從 contract
+
+        API->>DB: UPDATE contracts SET status='pending_termination'
+
+        API->>DB: COMMIT
+        API-->>FE: 200 { success: true, case_id: 123 }
+        FE-->>U: 跳轉到解約管理頁面
+    end
+```
+
+**API 規格**
+
+```yaml
+Endpoint: POST /tools/call
+Request:
+  name: termination_create_case
+  arguments:
+    contract_id: integer (required)
+    termination_type: enum [early, not_renewing, breach] (default: not_renewing)
+    notice_date: date (required)
+    expected_end_date: date (optional)
+    notes: string (optional)
+
+Response (success):
+  success: true
+  case_id: integer
+  contract_id: integer
+  status: "notice_received"
+```
+
+---
+
+### 5.2 UpdateTerminationStatus（更新解約狀態）
+
+```mermaid
+sequenceDiagram
+    participant U as 櫃台人員
+    participant FE as Frontend
+    participant API as MCP Server
+    participant DB as PostgreSQL
+
+    U->>FE: 點擊「更新狀態」按鈕
+    FE->>FE: 開啟狀態選擇 Modal
+
+    U->>FE: 選擇新狀態
+    FE->>API: POST /tools/call
+    Note over FE,API: { name: "termination_update_status",<br/>arguments: { case_id, status, date_field, date_value } }
+
+    API->>DB: SELECT * FROM termination_cases WHERE id = ?
+
+    alt 狀態已完成/取消
+        API-->>FE: 400 { error: "已完成或已取消的案件無法更新" }
+    else 可更新
+        API->>DB: UPDATE termination_cases SET<br/>status = ?,<br/>{date_field} = ?
+        Note over API,DB: 例如 status='moving_out', actual_move_out='2024-12-15'
+
+        API-->>FE: 200 { success: true, new_status: "moving_out" }
+        FE-->>U: 更新列表顯示
+    end
+```
+
+**狀態轉換規則**
+
+```
+notice_received → moving_out → pending_doc → pending_settlement → completed
+
+每次轉換可選擇更新對應日期欄位：
+- moving_out: actual_move_out
+- pending_doc: doc_submitted_date
+- pending_settlement: doc_approved_date
+- completed: refund_date
+```
+
+---
+
+### 5.3 UpdateChecklist（更新 Checklist）
+
+```mermaid
+sequenceDiagram
+    participant U as 櫃台人員
+    participant FE as Frontend
+    participant API as MCP Server
+    participant DB as PostgreSQL
+
+    U->>FE: 勾選 Checklist 項目
+    FE->>API: POST /tools/call
+    Note over FE,API: { name: "termination_update_checklist",<br/>arguments: { case_id, item, value } }
+
+    API->>DB: SELECT * FROM termination_cases WHERE id = ?
+
+    alt 案件已完成/取消
+        API-->>FE: 400 { error: "已完成或已取消的案件無法更新" }
+    else 可更新
+        API->>DB: UPDATE termination_cases SET<br/>checklist = jsonb_set(checklist, '{item}', 'value')
+
+        API->>DB: 計算新的進度
+        Note over API,DB: progress = SUM(checklist values = true)
+
+        API-->>FE: 200 { success: true, progress: 5 }
+        FE-->>U: 更新 Checklist 顯示 ✓
+    end
+```
+
+**Checklist 項目**
+
+```yaml
+- notice_confirmed: 確認收到通知
+- belongings_removed: 物品搬離
+- keys_returned: 鑰匙歸還
+- room_inspected: 場地檢查
+- doc_submitted: 公文送件
+- doc_approved: 公文核准
+- settlement_calculated: 結算計算
+- refund_processed: 押金退還
+```
+
+---
+
+### 5.4 CalculateSettlement（計算押金結算）
+
+```mermaid
+sequenceDiagram
+    participant U as 櫃台人員
+    participant FE as Frontend
+    participant API as MCP Server
+    participant DB as PostgreSQL
+
+    U->>FE: 點擊「計算結算」按鈕
+    FE->>FE: 開啟結算 Modal
+
+    U->>FE: 確認公文核准日期、其他扣款
+    FE->>API: POST /tools/call
+    Note over FE,API: { name: "termination_calculate_settlement",<br/>arguments: { case_id, doc_approved_date, other_deductions, other_deduction_notes } }
+
+    API->>DB: SELECT tc.*, c.end_date, c.monthly_rent<br/>FROM termination_cases tc<br/>JOIN contracts c ON ...
+
+    API->>API: 計算結算
+    Note over API: deduction_days = doc_approved_date - contract_end_date<br/>daily_rate = monthly_rent / 30<br/>deduction_amount = deduction_days * daily_rate<br/>refund_amount = deposit - deduction - other
+
+    API->>DB: UPDATE termination_cases SET<br/>doc_approved_date = ?,<br/>deduction_days = ?,<br/>deduction_amount = ?,<br/>other_deductions = ?,<br/>refund_amount = ?,<br/>settlement_date = NOW(),<br/>checklist.settlement_calculated = true
+
+    API-->>FE: 200 {<br/>success: true,<br/>deduction_days: 19,<br/>daily_rate: 500,<br/>deduction_amount: 9500,<br/>refund_amount: 20500<br/>}
+
+    FE-->>U: 顯示結算結果
+```
+
+**計算公式**
+
+```
+扣除天數 = MAX(0, 公文核准日 - 合約到期日)
+日租金 = 月租 ÷ 30
+扣除金額 = 扣除天數 × 日租金
+實際退還 = 押金 - 扣除金額 - 其他扣款
+```
+
+---
+
+### 5.5 ProcessRefund（處理退款）
+
+```mermaid
+sequenceDiagram
+    participant M as Manager
+    participant FE as Frontend
+    participant API as MCP Server
+    participant DB as PostgreSQL
+
+    M->>FE: 點擊「處理退款」按鈕
+    FE->>FE: 開啟退款 Modal
+
+    M->>FE: 填寫退款方式、帳戶、收據編號
+    FE->>API: POST /tools/call
+    Note over FE,API: { name: "termination_process_refund",<br/>arguments: { case_id, refund_method, refund_account, refund_receipt } }
+
+    API->>DB: SELECT * FROM termination_cases WHERE id = ?
+
+    alt 未計算結算
+        API-->>FE: 400 { error: "請先計算押金結算" }
+    else 可處理
+        API->>DB: BEGIN TRANSACTION
+
+        API->>DB: UPDATE termination_cases SET<br/>refund_method = ?,<br/>refund_account = ?,<br/>refund_receipt = ?,<br/>refund_date = CURRENT_DATE,<br/>status = 'completed',<br/>checklist.refund_processed = true
+
+        API->>DB: UPDATE contracts SET status = 'terminated'
+
+        API->>DB: UPDATE payments SET<br/>status = 'cancelled',<br/>cancelled_at = NOW(),<br/>cancel_reason = '合約解約'<br/>WHERE contract_id = ? AND status = 'pending'
+
+        API->>DB: COMMIT
+        API-->>FE: 200 { success: true }
+        FE-->>M: 顯示完成，案件移至已完成
+    end
+```
+
+---
+
+### 5.6 CancelTermination（取消解約）
+
+```mermaid
+sequenceDiagram
+    participant M as Manager
+    participant FE as Frontend
+    participant API as MCP Server
+    participant DB as PostgreSQL
+
+    M->>FE: 點擊「取消解約」按鈕
+    FE->>FE: 開啟確認 Modal
+
+    M->>FE: 填寫取消原因
+    FE->>API: POST /tools/call
+    Note over FE,API: { name: "termination_cancel",<br/>arguments: { case_id, cancel_reason } }
+
+    API->>DB: SELECT * FROM termination_cases WHERE id = ?
+
+    alt 已完成
+        API-->>FE: 400 { error: "已完成的解約案件無法取消" }
+    else 可取消
+        API->>DB: BEGIN TRANSACTION
+
+        API->>DB: UPDATE termination_cases SET<br/>status = 'cancelled',<br/>cancelled_at = NOW(),<br/>cancel_reason = ?
+
+        API->>DB: UPDATE contracts SET status = 'active'
+        Note over API,DB: 恢復合約為 active 狀態
+
+        API->>DB: COMMIT
+        API-->>FE: 200 { success: true }
+        FE-->>M: 顯示取消成功
+    end
+```
+
+---
+
+## 6. 查詢 API 彙整
 
 ### 5.1 PostgREST 直接查詢
 
