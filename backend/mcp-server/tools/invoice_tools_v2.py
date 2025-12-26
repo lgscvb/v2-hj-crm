@@ -167,7 +167,9 @@ async def invoice_create_v2(
     order_id = f"P{payment_id}_{timestamp}"  # 唯一訂單編號
 
     total_amount = int(amount)
-    sales_amount = math.floor(total_amount / 1.05)
+    # 光貿 API 計算邏輯：對含稅商品，Amount 放含稅金額
+    # SalesAmount = Round(含稅加總 / 1.05)，TaxAmount = 含稅 - SalesAmount
+    sales_amount = round(total_amount / 1.05)  # 用 round 不是 floor
     tax_amount = total_amount - sales_amount
 
     invoice_data = {
@@ -181,12 +183,12 @@ async def invoice_create_v2(
         "ProductItem": [{
             "Description": "共享空間租賃服務",
             "Quantity": "1",
-            "UnitPrice": str(sales_amount),
-            "Amount": str(sales_amount),
+            "UnitPrice": str(total_amount),  # 含稅單價
+            "Amount": str(total_amount),      # 含稅金額（光貿會自動拆算）
             "Remark": "",
             "TaxType": "1"
         }],
-        "SalesAmount": str(sales_amount),
+        "SalesAmount": str(sales_amount),  # 未稅銷售額
         "FreeTaxSalesAmount": "0",
         "ZeroTaxSalesAmount": "0",
         "TaxType": "1",
