@@ -218,6 +218,13 @@ from tools.invoice_tools import (
     invoice_allowance
 )
 
+# Invoice V2 - 冪等性保護（防止重複開票）
+from tools.invoice_tools_v2 import (
+    invoice_create_v2,
+    invoice_recover_operation,
+    set_postgrest_rpc as set_invoice_v2_rpc
+)
+
 from tools.contract_tools import (
     contract_generate_pdf,
     contract_preview,
@@ -233,6 +240,13 @@ from tools.billing_tools import (
     billing_reject_waive,
     billing_send_reminder,
     billing_batch_remind
+)
+
+# Billing V2 - Transaction 保護（免收核准）
+from tools.billing_tools_v2 import (
+    billing_approve_waive_v2,
+    billing_reject_waive_v2,
+    set_postgrest_rpc as set_billing_v2_rpc
 )
 
 # DDD Domain Tools - Renewal (v2 with RenewalCase entity)
@@ -794,6 +808,33 @@ MCP_TOOLS = {
         "handler": invoice_allowance
     },
 
+    # ==========================================================================
+    # Invoice V2 - 冪等性保護（防止重複開票）
+    # 建議使用 V2 版本，確保不會因 Timeout 產生重複發票
+    # ==========================================================================
+    "invoice_create_v2": {
+        "description": "開立電子發票 V2（冪等性保護，防止重複開票）",
+        "parameters": {
+            "payment_id": {"type": "integer", "description": "繳費記錄ID", "required": True},
+            "invoice_type": {"type": "string", "description": "發票類型 (personal=個人, business=公司)", "optional": True},
+            "buyer_name": {"type": "string", "description": "買受人名稱（公司發票必填）", "optional": True},
+            "buyer_tax_id": {"type": "string", "description": "統一編號（公司發票必填）", "optional": True},
+            "carrier_type": {"type": "string", "description": "載具類型 (mobile=手機條碼, natural_person=自然人憑證, donate=捐贈)", "optional": True},
+            "carrier_number": {"type": "string", "description": "載具號碼", "optional": True},
+            "donate_code": {"type": "string", "description": "愛心碼", "optional": True},
+            "print_flag": {"type": "boolean", "description": "是否列印", "optional": True},
+            "created_by": {"type": "string", "description": "操作者", "optional": True}
+        },
+        "handler": invoice_create_v2
+    },
+    "invoice_recover_operation": {
+        "description": "恢復發票操作（檢查是否有被中斷的操作）",
+        "parameters": {
+            "payment_id": {"type": "integer", "description": "繳費記錄ID", "required": True}
+        },
+        "handler": invoice_recover_operation
+    },
+
     # 合約生成工具
     "contract_generate_pdf": {
         "description": "生成合約 PDF",
@@ -885,6 +926,27 @@ MCP_TOOLS = {
             "created_by": {"type": "string", "description": "操作者", "optional": True}
         },
         "handler": billing_batch_remind
+    },
+
+    # ==========================================================================
+    # Billing V2 - Transaction 保護（確保免收核准的原子性）
+    # ==========================================================================
+    "billing_approve_waive_v2": {
+        "description": "核准免收申請 V2（Transaction 保護，確保付款和申請狀態同步更新）",
+        "parameters": {
+            "request_id": {"type": "integer", "description": "免收申請ID", "required": True},
+            "approved_by": {"type": "string", "description": "審批人", "required": True}
+        },
+        "handler": billing_approve_waive_v2
+    },
+    "billing_reject_waive_v2": {
+        "description": "駁回免收申請 V2（Transaction 保護）",
+        "parameters": {
+            "request_id": {"type": "integer", "description": "免收申請ID", "required": True},
+            "rejected_by": {"type": "string", "description": "審批人", "required": True},
+            "reject_reason": {"type": "string", "description": "駁回原因", "required": True}
+        },
+        "handler": billing_reject_waive_v2
     },
 
     # ==========================================================================
@@ -1677,6 +1739,14 @@ async def lifespan(app: FastAPI):
     set_termination_v2_postgrest(postgrest_request)
     set_termination_v2_rpc(postgrest_rpc)
     logger.info("Termination tools V2 initialized (with Transaction protection)")
+
+    # 設置發票工具 V2 的 postgrest_rpc
+    set_invoice_v2_rpc(postgrest_rpc)
+    logger.info("Invoice tools V2 initialized (with idempotency protection)")
+
+    # 設置繳費工具 V2 的 postgrest_rpc
+    set_billing_v2_rpc(postgrest_rpc)
+    logger.info("Billing tools V2 initialized (with Transaction protection)")
 
     # 啟動排程器
     scheduler.add_job(send_booking_reminders, 'interval', minutes=10)
