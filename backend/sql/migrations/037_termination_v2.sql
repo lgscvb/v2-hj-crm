@@ -383,7 +383,14 @@ CREATE TRIGGER trigger_auto_calculate_bad_debt
 COMMENT ON FUNCTION auto_calculate_bad_debt IS '進入押金結算時自動計算呆帳金額';
 
 -- ============================================================================
--- 8. 驗證
+-- 8. 重新授權視圖（DROP CASCADE 會移除權限）
+-- ============================================================================
+
+GRANT SELECT ON v_payments_due TO web_anon;
+GRANT SELECT ON v_termination_cases TO web_anon;
+
+-- ============================================================================
+-- 9. 驗證
 -- ============================================================================
 
 DO $$
@@ -397,4 +404,5 @@ BEGIN
     RAISE NOTICE '已新增: sync_contract_termination_status 觸發器';
     RAISE NOTICE '已新增: calculate_bad_debt 函數';
     RAISE NOTICE '已新增: auto_calculate_bad_debt 觸發器';
+    RAISE NOTICE '已授權: web_anon 存取視圖';
 END $$;
