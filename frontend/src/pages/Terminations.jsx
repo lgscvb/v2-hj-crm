@@ -7,7 +7,8 @@ import Modal from '../components/Modal'
 import {
   FileX, Clock, FileCheck, DollarSign, CheckCircle,
   AlertCircle, ChevronRight, Building2, User, Phone,
-  Calendar, Loader2, XCircle, Ban
+  Calendar, Loader2, XCircle, Ban, AlertTriangle, Send,
+  CreditCard, FileWarning
 } from 'lucide-react'
 
 // 狀態配置
@@ -16,6 +17,7 @@ const STATUS_CONFIG = {
   moving_out: { label: '搬遷中', color: 'orange', icon: FileX },
   pending_doc: { label: '等待公文', color: 'blue', icon: FileCheck },
   pending_settlement: { label: '押金結算中', color: 'purple', icon: DollarSign },
+  pending_authority: { label: '通報主管機關', color: 'red', icon: FileWarning },
   completed: { label: '已完成', color: 'green', icon: CheckCircle },
   cancelled: { label: '已取消', color: 'gray', icon: Ban }
 }
@@ -27,17 +29,35 @@ const TYPE_CONFIG = {
   breach: { label: '違約終止', color: 'orange' }
 }
 
-// Checklist 項目
-const CHECKLIST_ITEMS = [
+// Checklist 項目（基本項目 - 所有合約都有）
+const BASE_CHECKLIST_ITEMS = [
   { key: 'notice_confirmed', label: '解約通知已確認' },
-  { key: 'belongings_removed', label: '物品已搬離' },
-  { key: 'keys_returned', label: '鑰匙已歸還' },
-  { key: 'room_inspected', label: '房間已檢查' },
   { key: 'doc_submitted', label: '公文已送件' },
   { key: 'doc_approved', label: '公文已核准' },
   { key: 'settlement_calculated', label: '押金已結算' },
   { key: 'refund_processed', label: '押金已退還' }
 ]
+
+// 實體辦公室專用項目
+const PHYSICAL_OFFICE_ITEMS = [
+  { key: 'belongings_removed', label: '物品已搬離' },
+  { key: 'keys_returned', label: '鑰匙已歸還' },
+  { key: 'room_inspected', label: '房間已檢查' }
+]
+
+// 取得 checklist 項目（根據合約類型）
+const getChecklistItems = (isPhysicalOffice) => {
+  if (isPhysicalOffice) {
+    // 實體辦公室：notice_confirmed → 物品/鑰匙/檢查 → 公文 → 結算 → 退還
+    return [
+      BASE_CHECKLIST_ITEMS[0], // notice_confirmed
+      ...PHYSICAL_OFFICE_ITEMS,
+      ...BASE_CHECKLIST_ITEMS.slice(1)
+    ]
+  }
+  // 虛擬辦公室/純登記：只有基本項目
+  return BASE_CHECKLIST_ITEMS
+}
 
 export default function Terminations() {
   const { addNotification } = useStore()
@@ -258,17 +278,20 @@ export default function Terminations() {
     {
       accessor: 'progress',
       header: '進度',
-      cell: (row) => (
-        <div className="flex items-center gap-2">
-          <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-blue-500 transition-all"
-              style={{ width: `${(row.progress / 8) * 100}%` }}
-            />
+      cell: (row) => {
+        const totalSteps = row.total_steps || 8
+        return (
+          <div className="flex items-center gap-2">
+            <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 transition-all"
+                style={{ width: `${(row.progress / totalSteps) * 100}%` }}
+              />
+            </div>
+            <span className="text-xs text-gray-500">{row.progress}/{totalSteps}</span>
           </div>
-          <span className="text-xs text-gray-500">{row.progress}/8</span>
-        </div>
-      )
+        )
+      }
     },
     {
       accessor: 'contract_end_date',
@@ -299,7 +322,8 @@ export default function Terminations() {
     notice_received: cases.filter(c => c.status === 'notice_received').length,
     moving_out: cases.filter(c => c.status === 'moving_out').length,
     pending_doc: cases.filter(c => c.status === 'pending_doc').length,
-    pending_settlement: cases.filter(c => c.status === 'pending_settlement').length
+    pending_settlement: cases.filter(c => c.status === 'pending_settlement').length,
+    pending_authority: cases.filter(c => c.status === 'pending_authority').length
   }
 
   if (error) {
@@ -323,8 +347,8 @@ export default function Terminations() {
       </div>
 
       {/* 統計卡片 */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        {Object.entries(STATUS_CONFIG).slice(0, 4).map(([key, config]) => {
+      <div className="grid grid-cols-5 gap-4 mb-6">
+        {Object.entries(STATUS_CONFIG).slice(0, 5).map(([key, config]) => {
           const Icon = config.icon
           const count = stats[key] || 0
           return (
@@ -406,6 +430,12 @@ export default function Terminations() {
                     <span className="text-gray-500">押金</span>
                     <span className="font-medium">${(selectedCase.deposit_amount || selectedCase.contract_deposit)?.toLocaleString()}</span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">合約類型</span>
+                    <span className="font-medium">
+                      {selectedCase.is_physical_office ? '實體辦公室' : '虛擬辦公室/登記'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -451,11 +481,70 @@ export default function Terminations() {
               </div>
             </div>
 
+            {/* 待收款項（從應收帳款轉移至此） */}
+            {selectedCase.pending_payment_count > 0 && (
+              <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg">
+                <h3 className="font-medium text-amber-700 mb-3 flex items-center gap-2">
+                  <CreditCard className="w-4 h-4" />
+                  待收款項（已從應收帳款移除）
+                </h3>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm text-amber-600">共 {selectedCase.pending_payment_count} 筆未付款</div>
+                    <div className="text-xs text-amber-500 mt-1">這些款項將於押金結算時一併處理</div>
+                  </div>
+                  <div className="text-2xl font-bold text-amber-700">
+                    ${selectedCase.pending_payment_amount?.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 呆帳警告 */}
+            {selectedCase.is_bad_debt && (
+              <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
+                <h3 className="font-medium text-red-700 mb-3 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  呆帳案件
+                </h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <div className="text-red-600">欠款金額</div>
+                    <div className="font-medium text-red-700">${selectedCase.arrears_amount?.toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div className="text-red-600">呆帳金額</div>
+                    <div className="font-bold text-red-700 text-lg">${selectedCase.bad_debt_amount?.toLocaleString()}</div>
+                  </div>
+                  {selectedCase.authority_reported_date && (
+                    <div>
+                      <div className="text-red-600">通報日期</div>
+                      <div className="font-medium">{selectedCase.authority_reported_date}</div>
+                    </div>
+                  )}
+                  {selectedCase.authority_response_date && (
+                    <div>
+                      <div className="text-red-600">收到函文日期</div>
+                      <div className="font-medium">{selectedCase.authority_response_date}</div>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-2 text-xs text-red-500">
+                  計算公式：欠款 + 扣除費用 - 押金 = 呆帳金額
+                </div>
+              </div>
+            )}
+
             {/* Checklist */}
             <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="font-medium text-gray-700 mb-3">解約流程 Checklist</h3>
+              <h3 className="font-medium text-gray-700 mb-3 flex items-center justify-between">
+                <span>解約流程 Checklist</span>
+                <span className="text-xs text-gray-500">
+                  {selectedCase.is_physical_office ? '實體辦公室 (8 步驟)' : '虛擬辦公室 (5 步驟)'}
+                </span>
+              </h3>
               <div className="grid grid-cols-2 gap-3">
-                {CHECKLIST_ITEMS.map((item) => {
+                {getChecklistItems(selectedCase.is_physical_office !== false).map((item) => {
                   const checked = selectedCase.checklist?.[item.key] || false
                   return (
                     <label
@@ -564,7 +653,7 @@ export default function Terminations() {
                     </button>
                   )}
 
-                  {selectedCase.status === 'pending_settlement' && selectedCase.refund_amount !== null && (
+                  {selectedCase.status === 'pending_settlement' && selectedCase.refund_amount !== null && !selectedCase.is_bad_debt && (
                     <button
                       onClick={() => {
                         setRefundForm({
@@ -579,6 +668,36 @@ export default function Terminations() {
                     >
                       <CheckCircle className="w-4 h-4" />
                       處理退款
+                    </button>
+                  )}
+
+                  {/* 呆帳：通報主管機關 */}
+                  {selectedCase.status === 'pending_settlement' && selectedCase.is_bad_debt && (
+                    <button
+                      onClick={() => updateStatus.mutate({
+                        caseId: selectedCase.id,
+                        status: 'pending_authority',
+                        notes: `呆帳金額: $${selectedCase.bad_debt_amount}`
+                      })}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
+                    >
+                      <Send className="w-4 h-4" />
+                      通報主管機關
+                    </button>
+                  )}
+
+                  {/* 等待函文 → 完成 */}
+                  {selectedCase.status === 'pending_authority' && (
+                    <button
+                      onClick={() => updateStatus.mutate({
+                        caseId: selectedCase.id,
+                        status: 'completed',
+                        notes: '已收到國稅局函文，案件結案'
+                      })}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      已收到函文，結案
                     </button>
                   )}
 
