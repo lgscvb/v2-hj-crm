@@ -310,7 +310,18 @@ async def booking_create(
             "created_by": created_by
         }
 
-        result = await postgrest_post("meeting_room_bookings", booking_data)
+        try:
+            result = await postgrest_post("meeting_room_bookings", booking_data)
+        except Exception as db_error:
+            error_msg = str(db_error)
+            # 處理 Exclusion Constraint 違規（時段重疊）
+            if "no_overlapping_bookings" in error_msg or "exclusion" in error_msg.lower():
+                return {
+                    "success": False,
+                    "error": "該時段已被其他人預約，請選擇其他時間",
+                    "error_code": "OVERLAP_CONFLICT"
+                }
+            raise
 
         if not result:
             return {"success": False, "error": "建立預約失敗"}
@@ -351,15 +362,41 @@ async def booking_create(
 
             if cal_result.get("success"):
                 google_event_id = cal_result["event_id"]
-                # 更新預約記錄
+                # 更新預約記錄（含同步狀態）
                 await postgrest_patch(
                     "meeting_room_bookings",
                     {"id": f"eq.{booking['id']}"},
-                    {"google_event_id": google_event_id}
+                    {
+                        "google_event_id": google_event_id,
+                        "google_sync_status": "synced"
+                    }
                 )
                 logger.info(f"Created calendar event {google_event_id} for booking {booking_number}")
+            else:
+                # Calendar 建立失敗，記錄狀態
+                await postgrest_patch(
+                    "meeting_room_bookings",
+                    {"id": f"eq.{booking['id']}"},
+                    {
+                        "google_sync_status": "failed",
+                        "sync_error_message": cal_result.get("error", "Unknown error")
+                    }
+                )
+                logger.warning(f"Calendar sync failed for booking {booking_number}")
         except Exception as e:
             logger.warning(f"Failed to create calendar event: {e}")
+            # 記錄同步失敗
+            try:
+                await postgrest_patch(
+                    "meeting_room_bookings",
+                    {"id": f"eq.{booking['id']}"},
+                    {
+                        "google_sync_status": "failed",
+                        "sync_error_message": str(e)[:500]
+                    }
+                )
+            except:
+                pass  # 忽略次要錯誤
 
         return {
             "success": True,
