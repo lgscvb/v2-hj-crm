@@ -333,6 +333,8 @@ export default function Renewals() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [branchFilter, setBranchFilter] = useState('')
   const [pageSize, setPageSize] = useState(15)
+  // 三段視圖：預設隱藏「已移交」（handoff）
+  const [showHandoff, setShowHandoff] = useState(false)
   const [showColumnPicker, setShowColumnPicker] = useState(false)
   const [reminderText, setReminderText] = useState('')
   const [renewalNotes, setRenewalNotes] = useState('')
@@ -548,11 +550,17 @@ export default function Renewals() {
   // 根據篩選過濾資料
   const filteredRenewals = (renewals || []).filter((r) => {
     const status = getDisplayStatus(r)
+    // 三段視圖過濾：預設隱藏「已移交」（handoff）
+    if (!showHandoff && r.renewal_stage === 'handoff') return false
+    // Checklist 進度過濾
     if (statusFilter !== 'all' && status.stage !== statusFilter) return false
     if (statusFilter === 'urgent' && r.days_until_expiry > 7) return false
     if (branchFilter && r.branch_id !== parseInt(branchFilter)) return false
     return true
   })
+
+  // 統計「已移交」數量（用於顯示在切換按鈕）
+  const handoffCount = (renewals || []).filter(r => r.renewal_stage === 'handoff').length
 
   // 統計各階段數量（4 階段）
   const stageCounts = (renewals || []).reduce((acc, r) => {
@@ -850,6 +858,24 @@ export default function Renewals() {
 
       {/* 篩選器 */}
       <div className="flex flex-wrap items-center gap-4">
+        {/* 已移交切換（三段視圖） */}
+        <button
+          onClick={() => setShowHandoff(!showHandoff)}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${
+            showHandoff
+              ? 'border-purple-500 bg-purple-50 text-purple-700'
+              : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+          }`}
+        >
+          <ArrowRight className={`w-4 h-4 ${showHandoff ? 'text-purple-500' : 'text-gray-400'}`} />
+          <span className="text-sm">
+            已移交 ({handoffCount})
+          </span>
+          {showHandoff && <Check className="w-3 h-3" />}
+        </button>
+
+        <div className="w-px h-6 bg-gray-200" />
+
         <div className="flex items-center gap-2">
           <label htmlFor="renewal-branch-filter" className="text-sm text-gray-600">分館：</label>
           <select
