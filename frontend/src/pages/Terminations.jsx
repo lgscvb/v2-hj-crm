@@ -201,26 +201,26 @@ export default function Terminations() {
     setShowDetailModal(true)
   }
 
-  // 表格欄位
+  // 表格欄位（使用 DataTable 組件期望的格式：accessor/header/cell）
   const columns = [
     {
-      key: 'id',
-      label: '#',
-      render: (_, row) => (
+      accessor: 'id',
+      header: '#',
+      cell: (row) => (
         <span className="text-gray-500">#{row.id}</span>
       )
     },
     {
-      key: 'contract_number',
-      label: '合約編號',
-      render: (value) => (
-        <span className="font-medium text-blue-600">{value}</span>
+      accessor: 'contract_number',
+      header: '合約編號',
+      cell: (row) => (
+        <span className="font-medium text-blue-600">{row.contract_number}</span>
       )
     },
     {
-      key: 'customer_name',
-      label: '客戶',
-      render: (_, row) => (
+      accessor: 'customer_name',
+      header: '客戶',
+      cell: (row) => (
         <div>
           <div className="font-medium">{row.customer_name}</div>
           {row.company_name && (
@@ -230,10 +230,10 @@ export default function Terminations() {
       )
     },
     {
-      key: 'termination_type',
-      label: '類型',
-      render: (value) => {
-        const config = TYPE_CONFIG[value] || { label: value, color: 'gray' }
+      accessor: 'termination_type',
+      header: '類型',
+      cell: (row) => {
+        const config = TYPE_CONFIG[row.termination_type] || { label: row.termination_type, color: 'gray' }
         return (
           <span className={`px-2 py-1 rounded-full text-xs bg-${config.color}-100 text-${config.color}-700`}>
             {config.label}
@@ -242,10 +242,10 @@ export default function Terminations() {
       }
     },
     {
-      key: 'status',
-      label: '狀態',
-      render: (value) => {
-        const config = STATUS_CONFIG[value] || { label: value, color: 'gray', icon: AlertCircle }
+      accessor: 'status',
+      header: '狀態',
+      cell: (row) => {
+        const config = STATUS_CONFIG[row.status] || { label: row.status, color: 'gray', icon: AlertCircle }
         const Icon = config.icon
         return (
           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-${config.color}-100 text-${config.color}-700`}>
@@ -256,34 +256,34 @@ export default function Terminations() {
       }
     },
     {
-      key: 'progress',
-      label: '進度',
-      render: (value) => (
+      accessor: 'progress',
+      header: '進度',
+      cell: (row) => (
         <div className="flex items-center gap-2">
           <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
             <div
               className="h-full bg-blue-500 transition-all"
-              style={{ width: `${(value / 8) * 100}%` }}
+              style={{ width: `${(row.progress / 8) * 100}%` }}
             />
           </div>
-          <span className="text-xs text-gray-500">{value}/8</span>
+          <span className="text-xs text-gray-500">{row.progress}/8</span>
         </div>
       )
     },
     {
-      key: 'contract_end_date',
-      label: '合約到期日',
-      render: (value) => value ? new Date(value).toLocaleDateString('zh-TW') : '-'
+      accessor: 'contract_end_date',
+      header: '合約到期日',
+      cell: (row) => row.contract_end_date ? new Date(row.contract_end_date).toLocaleDateString('zh-TW') : '-'
     },
     {
-      key: 'created_at',
-      label: '建立時間',
-      render: (value) => new Date(value).toLocaleDateString('zh-TW')
+      accessor: 'created_at',
+      header: '建立時間',
+      cell: (row) => new Date(row.created_at).toLocaleDateString('zh-TW')
     },
     {
-      key: 'actions',
-      label: '操作',
-      render: (_, row) => (
+      header: '操作',
+      sortable: false,
+      cell: (row) => (
         <button
           onClick={() => openDetail(row)}
           className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
