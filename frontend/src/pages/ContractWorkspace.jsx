@@ -170,11 +170,13 @@ export default function ContractWorkspace() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['contract-timeline', contractId],
     queryFn: async () => {
-      const result = await callTool('contract_get_timeline', { contract_id: contractId })
-      if (!result.success) {
-        throw new Error(result.error || '取得合約資料失敗')
+      const response = await callTool('contract_get_timeline', { contract_id: contractId })
+      // callTool 回傳 { success, tool, result }
+      // result 內才是實際資料 { success, contract, timeline, decision, ... }
+      if (!response.success || !response.result?.success) {
+        throw new Error(response.result?.error || response.error || '取得合約資料失敗')
       }
-      return result
+      return response.result
     },
     enabled: !!contractId
   })
