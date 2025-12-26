@@ -1,4 +1,5 @@
-import { useState, useId } from 'react'
+import { useState, useId, useEffect } from 'react'
+import PropTypes from 'prop-types'
 import {
   ChevronUp,
   ChevronDown,
@@ -10,6 +11,28 @@ import {
   RefreshCw
 } from 'lucide-react'
 
+/**
+ * DataTable 通用表格組件
+ *
+ * @param {Object[]} columns - 欄位定義陣列
+ * @param {string} columns[].header - 表頭標題（必填）
+ * @param {string} [columns[].accessor] - 資料欄位名稱（用於取值和排序）
+ * @param {Function} [columns[].cell] - 自定義渲染函數 (row, index) => ReactNode
+ * @param {boolean} [columns[].sortable=true] - 是否可排序
+ * @param {string} [columns[].width] - 欄位寬度
+ * @param {string} [columns[].className] - 額外 CSS class
+ * @param {Object[]} data - 資料陣列
+ * @param {boolean} [loading=false] - 載入中狀態
+ * @param {boolean} [searchable=true] - 是否顯示搜尋框
+ * @param {boolean} [exportable=true] - 是否顯示匯出按鈕
+ * @param {boolean} [pagination=true] - 是否啟用分頁
+ * @param {number} [pageSize=10] - 每頁筆數
+ * @param {Function} [onRefresh] - 重新整理回調
+ * @param {Function} [onRowClick] - 列點擊回調
+ * @param {string} [emptyMessage='沒有資料'] - 空資料訊息
+ * @param {ReactNode} [actions] - 額外操作按鈕
+ * @param {string} [id] - 表格 ID
+ */
 export default function DataTable({
   columns,
   data = [],
@@ -24,6 +47,39 @@ export default function DataTable({
   actions,
   id: tableId
 }) {
+  // 開發環境：檢查 columns 格式是否正確
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development' && columns) {
+      columns.forEach((col, index) => {
+        // 檢查是否使用了錯誤的屬性名稱
+        if (col.key !== undefined && col.accessor === undefined) {
+          console.warn(
+            `[DataTable] columns[${index}] 使用了 "key" 屬性，應改為 "accessor"。` +
+            `\n正確格式：{ accessor: '${col.key}', header: '...', cell: (row) => ... }`
+          )
+        }
+        if (col.label !== undefined && col.header === undefined) {
+          console.warn(
+            `[DataTable] columns[${index}] 使用了 "label" 屬性，應改為 "header"。` +
+            `\n正確格式：{ accessor: '...', header: '${col.label}', cell: (row) => ... }`
+          )
+        }
+        if (col.render !== undefined && col.cell === undefined) {
+          console.warn(
+            `[DataTable] columns[${index}] 使用了 "render" 屬性，應改為 "cell"。` +
+            `\n注意：cell 函數簽名是 (row, index) => ReactNode，而非 (value, row) => ReactNode`
+          )
+        }
+        // 檢查必填屬性
+        if (!col.header) {
+          console.warn(
+            `[DataTable] columns[${index}] 缺少 "header" 屬性（表頭標題）。`
+          )
+        }
+      })
+    }
+  }, [columns])
+
   // 生成唯一 ID（若未提供）
   const generatedId = useId()
   const uniqueId = tableId || generatedId
@@ -267,4 +323,47 @@ export default function DataTable({
       )}
     </div>
   )
+}
+
+// PropTypes 定義
+DataTable.propTypes = {
+  /** 欄位定義陣列 */
+  columns: PropTypes.arrayOf(
+    PropTypes.shape({
+      /** 表頭標題（必填） */
+      header: PropTypes.string.isRequired,
+      /** 資料欄位名稱（用於取值和排序） */
+      accessor: PropTypes.string,
+      /** 自定義渲染函數 (row, index) => ReactNode */
+      cell: PropTypes.func,
+      /** 是否可排序（預設 true） */
+      sortable: PropTypes.bool,
+      /** 欄位寬度 */
+      width: PropTypes.string,
+      /** 額外 CSS class */
+      className: PropTypes.string
+    })
+  ).isRequired,
+  /** 資料陣列 */
+  data: PropTypes.array,
+  /** 載入中狀態 */
+  loading: PropTypes.bool,
+  /** 是否顯示搜尋框 */
+  searchable: PropTypes.bool,
+  /** 是否顯示匯出按鈕 */
+  exportable: PropTypes.bool,
+  /** 是否啟用分頁 */
+  pagination: PropTypes.bool,
+  /** 每頁筆數 */
+  pageSize: PropTypes.number,
+  /** 重新整理回調 */
+  onRefresh: PropTypes.func,
+  /** 列點擊回調 */
+  onRowClick: PropTypes.func,
+  /** 空資料訊息 */
+  emptyMessage: PropTypes.string,
+  /** 額外操作按鈕 */
+  actions: PropTypes.node,
+  /** 表格 ID */
+  id: PropTypes.string
 }
