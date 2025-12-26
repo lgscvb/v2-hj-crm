@@ -318,8 +318,29 @@ export default function Renewals() {
       }
       return crm.setRenewalFlag(contractId, flag, value)
     },
-    onSuccess: () => {
+    onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ['renewal-reminders'] })
+      // 同步更新 selectedContract 以即時反映 UI 變化
+      if (selectedContract && selectedContract.id === variables.contractId) {
+        const flagMap = {
+          notified: 'renewal_notified_at',
+          confirmed: 'renewal_confirmed_at',
+          paid: 'renewal_paid_at',
+          signed: 'renewal_signed_at'
+        }
+        const field = flagMap[variables.flag]
+        if (field) {
+          setSelectedContract(prev => ({
+            ...prev,
+            [field]: variables.value ? new Date().toISOString() : null
+          }))
+        } else if (variables.flag === 'invoice') {
+          setSelectedContract(prev => ({
+            ...prev,
+            invoice_status: variables.value
+          }))
+        }
+      }
     }
   })
 
