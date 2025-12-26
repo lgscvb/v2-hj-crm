@@ -971,3 +971,30 @@ export function useMonthlyRemindersSummary() {
     }
   })
 }
+
+// ============================================================================
+// 解約管理 Hooks
+// ============================================================================
+
+export function useTerminationCases(params = {}) {
+  const selectedBranch = useStore((state) => state.selectedBranch)
+
+  return useQuery({
+    queryKey: ['termination-cases', params, selectedBranch],
+    queryFn: async () => {
+      const queryParams = {
+        order: 'created_at.desc',
+        ...params
+      }
+      // 預設只顯示進行中的案件
+      if (!params.status) {
+        queryParams.status = 'not.in.(completed,cancelled)'
+      }
+      if (selectedBranch) {
+        queryParams.branch_id = `eq.${selectedBranch}`
+      }
+      const data = await db.query('v_termination_cases', queryParams)
+      return Array.isArray(data) ? data : []
+    }
+  })
+}

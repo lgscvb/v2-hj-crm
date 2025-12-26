@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useBranchRevenue, useTodayTasks, useOverdueDetails, useRenewalReminders, usePaymentsDue, useTodayBookings } from '../hooks/useApi'
+import { useBranchRevenue, useTodayTasks, useOverdueDetails, useRenewalReminders, usePaymentsDue, useTodayBookings, useTerminationCases } from '../hooks/useApi'
 import { useNavigate } from 'react-router-dom'
 import {
   Users,
@@ -19,7 +19,8 @@ import {
   Loader2,
   MessageCircle,
   History,
-  Power
+  Power,
+  FileX
 } from 'lucide-react'
 import { line } from '../services/api'
 import StatCard from '../components/StatCard'
@@ -68,6 +69,7 @@ export default function Dashboard() {
   const { data: renewals } = useRenewalReminders()
   const { data: paymentsDue } = usePaymentsDue()
   const { data: todayBookings, isLoading: bookingsLoading } = useTodayBookings()
+  const { data: terminationCases } = useTerminationCases()
 
   // 催繳狀態
   const [sendingReminder, setSendingReminder] = useState({})
@@ -311,6 +313,50 @@ export default function Dashboard() {
               <div className="bg-green-100 text-green-700 rounded-lg p-3 text-center">
                 <div className="text-2xl font-bold">{stageCounts.completed}</div>
                 <div className="text-xs">已完成</div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* 解約管理狀態 */}
+      {terminationCases?.length > 0 && (() => {
+        // 計算各狀態數量
+        const statusCounts = terminationCases.reduce((acc, c) => {
+          acc[c.status] = (acc[c.status] || 0) + 1
+          return acc
+        }, { notice_received: 0, moving_out: 0, pending_doc: 0, pending_settlement: 0 })
+
+        return (
+          <div className="card cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/terminations')}>
+            <div className="card-header">
+              <h3 className="card-title flex items-center gap-2">
+                <FileX className="w-5 h-5 text-red-500" />
+                解約管理
+              </h3>
+              <Badge variant="danger">{terminationCases.length} 件</Badge>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {/* 已通知 */}
+              <div className="bg-yellow-100 text-yellow-700 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold">{statusCounts.notice_received}</div>
+                <div className="text-xs">已收通知</div>
+              </div>
+              {/* 搬遷中 */}
+              <div className="bg-orange-100 text-orange-700 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold">{statusCounts.moving_out}</div>
+                <div className="text-xs">搬遷中</div>
+              </div>
+              {/* 等待公文 */}
+              <div className="bg-blue-100 text-blue-700 rounded-lg p-3 text-center relative">
+                <Clock className="w-4 h-4 absolute top-2 right-2 opacity-50" />
+                <div className="text-2xl font-bold">{statusCounts.pending_doc}</div>
+                <div className="text-xs">等待公文</div>
+              </div>
+              {/* 押金結算 */}
+              <div className="bg-purple-100 text-purple-700 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold">{statusCounts.pending_settlement}</div>
+                <div className="text-xs">押金結算</div>
               </div>
             </div>
           </div>
