@@ -31,9 +31,10 @@ import {
   Loader2,
   Trash2,
   Gift,
-  Pencil
+  Pencil,
+  FileX
 } from 'lucide-react'
-import api from '../services/api'
+import api, { callTool } from '../services/api'
 
 // 應收款可選欄位
 const DUE_COLUMNS = {
@@ -103,6 +104,12 @@ export default function Payments() {
     payment_period: '',
     notes: ''
   })
+
+  // 建立解約案件相關狀態
+  const [showTerminationModal, setShowTerminationModal] = useState(false)
+  const [terminationPayment, setTerminationPayment] = useState(null)
+  const [terminationLoading, setTerminationLoading] = useState(false)
+  const [terminationType, setTerminationType] = useState('not_renewing')
 
   // 生成待繳記錄相關狀態
   const [showGenerateModal, setShowGenerateModal] = useState(false)
@@ -438,6 +445,17 @@ export default function Payments() {
             title="刪除"
           >
             <Trash2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setTerminationPayment(row)
+              setShowTerminationModal(true)
+            }}
+            className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+            title="建立解約案件"
+          >
+            <FileX className="w-4 h-4" />
           </button>
         </div>
       )
@@ -1516,6 +1534,110 @@ export default function Payments() {
                 className="input resize-none"
                 placeholder="備註說明（選填）"
               />
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* 建立解約案件 Modal */}
+      <Modal
+        open={showTerminationModal}
+        onClose={() => {
+          if (!terminationLoading) {
+            setShowTerminationModal(false)
+            setTerminationPayment(null)
+            setTerminationType('not_renewing')
+          }
+        }}
+        title="建立解約案件"
+        size="sm"
+        footer={
+          <>
+            <button
+              onClick={() => {
+                setShowTerminationModal(false)
+                setTerminationPayment(null)
+                setTerminationType('not_renewing')
+              }}
+              disabled={terminationLoading}
+              className="btn-secondary"
+            >
+              取消
+            </button>
+            <button
+              onClick={async () => {
+                if (!terminationPayment?.contract_id) return
+                setTerminationLoading(true)
+                try {
+                  const result = await callTool('termination_create_case', {
+                    contract_id: terminationPayment.contract_id,
+                    termination_type: terminationType,
+                    notice_date: new Date().toISOString().split('T')[0],
+                    notes: `從繳費管理建立，原始繳費記錄: ${terminationPayment.payment_period}`
+                  })
+                  if (result.success) {
+                    setShowTerminationModal(false)
+                    setTerminationPayment(null)
+                    refetchDue()
+                    navigate('/terminations')
+                  } else {
+                    alert(result.error || '建立失敗')
+                  }
+                } catch (e) {
+                  alert('建立解約案件失敗: ' + e.message)
+                } finally {
+                  setTerminationLoading(false)
+                }
+              }}
+              disabled={terminationLoading || !terminationPayment?.contract_id}
+              className="btn-danger"
+            >
+              <FileX className="w-4 h-4 mr-2" />
+              {terminationLoading ? '建立中...' : '確認建立'}
+            </button>
+          </>
+        }
+      >
+        {terminationPayment && (
+          <div className="space-y-4">
+            <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+              <div className="flex items-start gap-3">
+                <FileX className="w-6 h-6 text-orange-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-orange-700">即將建立解約案件</p>
+                  <p className="text-sm text-orange-600 mt-1">
+                    建立後合約狀態將變為「解約中」，待收款項會從應收帳款移除。
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <p className="font-medium">
+                {terminationPayment.customer_name || '未知客戶'}
+              </p>
+              <p className="text-sm text-gray-500">
+                {terminationPayment.company_name && `${terminationPayment.company_name} · `}
+                {terminationPayment.branch_name || '-'}
+              </p>
+              <p className="text-sm text-gray-500 mt-1">
+                合約 ID: {terminationPayment.contract_id || '未知'}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                解約類型
+              </label>
+              <select
+                value={terminationType}
+                onChange={(e) => setTerminationType(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              >
+                <option value="not_renewing">到期不續約</option>
+                <option value="early">提前解約</option>
+                <option value="breach">違約終止</option>
+              </select>
             </div>
           </div>
         )}
