@@ -29,7 +29,10 @@ WHERE id IN (1242, 1243);
 CREATE INDEX IF NOT EXISTS idx_contracts_is_billable ON contracts(is_billable) WHERE is_billable = true;
 
 -- 4. 重建 v_payments_due 視圖（加入 is_billable 過濾）
-CREATE OR REPLACE VIEW v_payments_due AS
+-- 注意：由於視圖結構變更，必須先 DROP 再 CREATE
+DROP VIEW IF EXISTS v_payments_due CASCADE;
+
+CREATE VIEW v_payments_due AS
 SELECT
     p.id,
     p.contract_id,
@@ -56,6 +59,7 @@ SELECT
     ct.contract_number,
     ct.monthly_rent,
     ct.end_date AS contract_end_date,
+    ct.status AS contract_status,
     -- 緊急度計算
     CASE
         WHEN p.payment_status = 'overdue' AND p.overdue_days > 30 THEN 'critical'
@@ -71,6 +75,8 @@ JOIN customers c ON p.customer_id = c.id
 JOIN branches b ON p.branch_id = b.id
 LEFT JOIN contracts ct ON p.contract_id = ct.id
 WHERE p.payment_status IN ('pending', 'overdue')
+  -- 排除解約中/已解約的合約
+  AND (ct.status IS NULL OR ct.status NOT IN ('pending_termination', 'terminated'))
   -- 排除非計費合約（內部/免租金座位）
   AND (ct.is_billable IS NULL OR ct.is_billable = true)
 ORDER BY
@@ -80,7 +86,8 @@ ORDER BY
     END,
     p.due_date ASC;
 
-COMMENT ON VIEW v_payments_due IS '應收款列表，含緊急度標記（排除 is_billable=false 的合約）';
+COMMENT ON VIEW v_payments_due IS '應收款列表，含緊急度標記（排除解約中/已解約及非計費合約）';
+GRANT SELECT ON v_payments_due TO anon, authenticated;
 
 -- ============================================================================
 -- 完成
