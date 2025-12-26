@@ -386,8 +386,11 @@ COMMENT ON FUNCTION auto_calculate_bad_debt IS '進入押金結算時自動計�
 -- 8. 重新授權視圖（DROP CASCADE 會移除權限）
 -- ============================================================================
 
-GRANT SELECT ON v_payments_due TO web_anon;
-GRANT SELECT ON v_termination_cases TO web_anon;
+-- anon 是 PostgREST 匿名角色（PGRST_DB_ANON_ROLE）
+GRANT SELECT, INSERT, UPDATE, DELETE ON v_payments_due TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON v_termination_cases TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON v_payments_due TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON v_termination_cases TO authenticated;
 
 -- ============================================================================
 -- 9. 驗證
