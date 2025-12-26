@@ -529,6 +529,7 @@ export function useTodayTasks() {
             amount: p.amount,
             amountLabel: '當期',
             customer_name: p.customer_name,
+            company_name: p.company_name,
             branch_name: p.branch_name,
             priority: p.urgency === 'upcoming' ? 'high' : 'medium'
           })
@@ -546,6 +547,7 @@ export function useTodayTasks() {
             amount: r.monthly_rent,
             amountLabel: '月租',
             customer_name: r.customer_name,
+            company_name: r.company_name,
             branch_name: r.branch_name,
             priority: r.days_remaining <= 7 ? 'urgent' : 'high'
           })

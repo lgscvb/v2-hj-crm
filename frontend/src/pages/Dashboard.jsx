@@ -633,7 +633,9 @@ export default function Dashboard() {
                       <p className="text-sm font-medium text-gray-900">
                         {task.task_description}
                       </p>
-                      <p className="text-xs text-gray-500">{task.branch_name}</p>
+                      <p className="text-xs text-gray-500">
+                        {task.company_name && `${task.company_name} · `}{task.branch_name}
+                      </p>
                     </div>
                   </div>
                   {task.amount && (
