@@ -29,7 +29,8 @@ import {
   ArrowRight,
   FilePlus,
   Play,
-  Trash2
+  Trash2,
+  Layout
 } from 'lucide-react'
 
 // ============================================================================
@@ -729,6 +730,16 @@ export default function Renewals() {
       sortable: false,
       cell: (row) => (
         <div className="flex items-center gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate(`/contracts/${row.id}/workspace`)
+            }}
+            className="p-1.5 text-purple-600 hover:bg-purple-50 rounded"
+            title="合約工作台"
+          >
+            <Layout className="w-4 h-4" />
+          </button>
           {row.line_user_id && (
             <button
               onClick={(e) => {

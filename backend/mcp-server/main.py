@@ -228,7 +228,8 @@ from tools.invoice_tools_v2 import (
 from tools.contract_tools import (
     contract_generate_pdf,
     contract_preview,
-    contract_terminate
+    contract_terminate,
+    contract_get_timeline
 )
 
 # DDD Domain Tools - Billing
@@ -860,6 +861,13 @@ MCP_TOOLS = {
             "terminated_by": {"type": "string", "description": "操作者", "optional": True}
         },
         "handler": contract_terminate
+    },
+    "contract_get_timeline": {
+        "description": "取得合約的 Timeline 和 Decision（用於 Contract Workspace）",
+        "parameters": {
+            "contract_id": {"type": "integer", "description": "合約ID", "required": True}
+        },
+        "handler": contract_get_timeline
     },
 
     # ==========================================================================

@@ -20,6 +20,62 @@ logger = logging.getLogger(__name__)
 # PostgREST URL
 POSTGREST_URL = os.getenv("POSTGREST_URL", "http://postgrest:3000")
 
+
+# ============================================================================
+# Contract Workspace - Timeline API
+# ============================================================================
+
+async def contract_get_timeline(contract_id: int) -> Dict[str, Any]:
+    """
+    取得合約的 Timeline 和 Decision（用於 Contract Workspace）
+
+    透過 PostgreSQL RPC 函數 get_contract_timeline 取得聚合資料，
+    回傳結構包含：
+    - contract: 合約基本資訊
+    - timeline: 五個節點的狀態陣列（intent/signing/payment/invoice/activation）
+    - decision: 目前卡點和下一步行動
+    - next_contract: 續約合約資訊（如果有）
+    - prev_contract_id: 上一期合約ID（如果有）
+
+    Args:
+        contract_id: 合約ID
+
+    Returns:
+        Timeline 和 Decision 資料
+    """
+    try:
+        url = f"{POSTGREST_URL}/rpc/get_contract_timeline"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url,
+                json={"p_contract_id": contract_id},
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
+                timeout=30.0
+            )
+
+            if response.status_code >= 400:
+                logger.error(f"get_contract_timeline error: {response.status_code} - {response.text}")
+                return {
+                    "success": False,
+                    "error": f"API 錯誤: {response.status_code}"
+                }
+
+            result = response.json()
+
+            # PostgreSQL 函數已經回傳完整結構
+            return result
+
+    except Exception as e:
+        logger.error(f"contract_get_timeline error: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
 # Cloud Run PDF Generator URL
 PDF_GENERATOR_URL = os.getenv(
     "PDF_GENERATOR_URL",

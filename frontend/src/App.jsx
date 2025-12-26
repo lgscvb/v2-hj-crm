@@ -26,6 +26,7 @@ import DataValidation from './pages/DataValidation'
 import Bookings from './pages/Bookings'
 import FloorPlan from './pages/FloorPlan'
 import ContractCreate from './pages/ContractCreate'
+import ContractWorkspace from './pages/ContractWorkspace'
 import ServicePlans from './pages/ServicePlans'
 import Terminations from './pages/Terminations'
 
@@ -46,6 +47,7 @@ function App() {
         <Route path="contracts/new" element={<ContractCreate />} />
         <Route path="contracts/expired" element={<ExpiredContracts />} />
         <Route path="contracts/:id" element={<ContractDetail />} />
+        <Route path="contracts/:id/workspace" element={<ContractWorkspace />} />
         <Route path="payments/legal-letters" element={<LegalLetters />} />
         <Route path="payments" element={<Payments />} />
         <Route path="invoices" element={<Invoices />} />
