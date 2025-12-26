@@ -89,6 +89,22 @@ export function useContractDetail(contractId) {
   })
 }
 
+export function usePendingSignContracts(params = {}) {
+  const selectedBranch = useStore((state) => state.selectedBranch)
+
+  return useQuery({
+    queryKey: ['pending-sign-contracts', params, selectedBranch],
+    queryFn: async () => {
+      const queryParams = { ...params }
+      if (selectedBranch) {
+        queryParams.branch_id = `eq.${selectedBranch}`
+      }
+      const data = await db.getPendingSignContracts(queryParams)
+      return Array.isArray(data) ? data : []
+    }
+  })
+}
+
 // ============================================================================
 // 繳費相關 Hooks
 // ============================================================================

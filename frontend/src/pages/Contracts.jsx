@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useContracts, useCustomers } from '../hooks/useApi'
+import { useContracts, useCustomers, usePendingSignContracts } from '../hooks/useApi'
 import { crm, callTool } from '../services/api'
 import useStore from '../store/useStore'
 import DataTable from '../components/DataTable'
 import Modal from '../components/Modal'
+import Badge from '../components/Badge'
 import { pdf } from '@react-pdf/renderer'
 import ContractPDF from '../components/pdf/ContractPDF'
 import OfficePDF from '../components/pdf/OfficePDF'
 import FlexSeatPDF from '../components/pdf/FlexSeatPDF'
-import { FileText, Calendar, DollarSign, FileX, Settings2, ChevronDown, FileDown, Loader2, X, Plus, RefreshCw, Edit3, Trash2, Archive, Pencil } from 'lucide-react'
+import { FileText, Calendar, DollarSign, FileX, Settings2, ChevronDown, FileDown, Loader2, X, Plus, RefreshCw, Edit3, Trash2, Archive, Pencil, Clock, Send, Layout, AlertTriangle } from 'lucide-react'
 
 // 分館資料（含法人資訊）
 const BRANCHES = {
@@ -75,6 +76,7 @@ export default function Contracts() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const customerIdFilter = searchParams.get('customer_id')
+  const [activeTab, setActiveTab] = useState('all') // 'all' | 'pending_sign'
   const [statusFilter, setStatusFilter] = useState('')
   const [pageSize, setPageSize] = useState(15)
   const [showColumnPicker, setShowColumnPicker] = useState(false)
@@ -113,6 +115,9 @@ export default function Contracts() {
 
   const queryClient = useQueryClient()
   const addNotification = useStore((state) => state.addNotification)
+
+  // 待簽列表 query
+  const { data: pendingSignContracts = [], isLoading: isPendingSignLoading } = usePendingSignContracts()
 
   // 客戶列表（保留供其他功能使用）
   // const { data: customers } = useCustomers({ limit: 500 })
@@ -869,8 +874,42 @@ export default function Contracts() {
 
   return (
     <div className="space-y-6">
-      {/* 統計卡片 */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Tab 切換 */}
+      <div className="flex gap-2 border-b">
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+            activeTab === 'all'
+              ? 'text-primary-600 border-primary-600'
+              : 'text-gray-500 border-transparent hover:text-gray-700'
+          }`}
+        >
+          <FileText className="w-4 h-4 inline-block mr-1.5" />
+          全部合約
+        </button>
+        <button
+          onClick={() => setActiveTab('pending_sign')}
+          className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+            activeTab === 'pending_sign'
+              ? 'text-primary-600 border-primary-600'
+              : 'text-gray-500 border-transparent hover:text-gray-700'
+          }`}
+        >
+          <Clock className="w-4 h-4 inline-block mr-1.5" />
+          待簽列表
+          {pendingSignContracts.length > 0 && (
+            <span className="ml-1.5 px-1.5 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full">
+              {pendingSignContracts.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Tab 內容 */}
+      {activeTab === 'all' ? (
+        <>
+          {/* 統計卡片 */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="card flex items-center gap-4">
           <div className="p-3 bg-blue-100 rounded-xl">
             <FileText className="w-6 h-6 text-blue-600" />
@@ -1014,6 +1053,99 @@ export default function Contracts() {
         emptyMessage="沒有合約資料"
         onRowClick={(row) => navigate(`/contracts/${row.id}`)}
       />
+        </>
+      ) : (
+        /* 待簽列表 Tab */
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl border shadow-sm">
+            <div className="p-4 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">待簽合約</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                追蹤等待客戶回簽的合約，依等待天數排序
+              </p>
+            </div>
+
+            {isPendingSignLoading ? (
+              <div className="flex items-center justify-center h-32">
+                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+              </div>
+            ) : pendingSignContracts.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                <Clock className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                <p>目前沒有待簽合約</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {pendingSignContracts.map((contract) => (
+                  <div
+                    key={contract.id}
+                    className="p-4 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3">
+                          <span className="font-medium text-primary-600">
+                            {contract.contract_number}
+                          </span>
+                          <Badge variant={contract.status === 'pending_sign' ? 'warning' : 'info'}>
+                            {contract.status === 'pending_sign' ? '待簽約' : '續約草稿'}
+                          </Badge>
+                          {contract.has_paid_but_not_signed && (
+                            <Badge variant="danger">
+                              <AlertTriangle className="w-3 h-3 mr-1" />
+                              已付未簽
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
+                          <span>{contract.customer_name}</span>
+                          {contract.company_name && (
+                            <span className="text-gray-400">({contract.company_name})</span>
+                          )}
+                          <span>|</span>
+                          <span>{contract.branch_name}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className={`text-sm font-medium ${
+                            contract.days_pending > 14 ? 'text-red-600' :
+                            contract.days_pending > 7 ? 'text-orange-600' :
+                            'text-gray-600'
+                          }`}>
+                            等待 {contract.days_pending || 0} 天
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            ${(contract.monthly_rent || 0).toLocaleString()}/月
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <Link
+                            to={`/contracts/${contract.id}/workspace`}
+                            className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg"
+                            title="工作台"
+                          >
+                            <Layout className="w-4 h-4" />
+                          </Link>
+                          <Link
+                            to={`/contracts/${contract.id}`}
+                            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                            title="合約詳情"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 新增合約 Modal */}
       <Modal

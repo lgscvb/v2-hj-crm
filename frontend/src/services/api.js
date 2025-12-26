@@ -204,6 +204,12 @@ export const db = {
     return ensureArray(data)
   },
 
+  // 待簽合約列表
+  async getPendingSignContracts(params = {}) {
+    const data = await api.get('/api/db/v_pending_sign_contracts', { params })
+    return ensureArray(data)
+  },
+
   // 佣金
   async getCommissions(params = {}) {
     const data = await api.get('/api/db/v_commission_tracker', { params })
