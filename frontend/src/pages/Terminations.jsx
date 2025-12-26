@@ -89,6 +89,17 @@ export default function Terminations() {
   // 取消原因
   const [cancelReason, setCancelReason] = useState('')
 
+  // 新增解約案件
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    contract_id: '',
+    termination_type: 'not_renewing',
+    notice_date: new Date().toISOString().split('T')[0],
+    notes: ''
+  })
+  const [contractSearch, setContractSearch] = useState('')
+  const [contractOptions, setContractOptions] = useState([])
+
   // 取得解約案件列表
   const { data: cases = [], isLoading, error } = useQuery({
     queryKey: ['termination_cases', statusFilter],
@@ -206,6 +217,50 @@ export default function Terminations() {
       }
     }
   })
+
+  // 建立解約案件
+  const createCase = useMutation({
+    mutationFn: async (data) => {
+      return await callTool('termination_create_case', data)
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        queryClient.invalidateQueries(['termination_cases'])
+        addNotification({ type: 'success', message: result.message })
+        setShowCreateModal(false)
+        setCreateForm({
+          contract_id: '',
+          termination_type: 'not_renewing',
+          notice_date: new Date().toISOString().split('T')[0],
+          notes: ''
+        })
+        setContractSearch('')
+        setContractOptions([])
+      } else {
+        addNotification({ type: 'error', message: result.error || '建立失敗' })
+      }
+    }
+  })
+
+  // 搜尋合約
+  const searchContracts = async (keyword) => {
+    if (!keyword || keyword.length < 2) {
+      setContractOptions([])
+      return
+    }
+    try {
+      // 搜尋生效中的合約
+      const result = await db.query('contracts', {
+        or: `(contract_number.ilike.*${keyword}*,customer_id.in.(select id from customers where name ilike '%${keyword}%' or company_name ilike '%${keyword}%'))`,
+        status: 'eq.active',
+        select: 'id,contract_number,customer_id,monthly_rent,end_date,customers(name,company_name)',
+        limit: 10
+      })
+      setContractOptions(result || [])
+    } catch (e) {
+      console.error('搜尋合約失敗:', e)
+    }
+  }
 
   // 載入案件詳情
   const loadCaseDetail = async (caseId) => {
@@ -344,6 +399,13 @@ export default function Terminations() {
           <h1 className="text-2xl font-bold text-gray-900">解約管理</h1>
           <p className="text-gray-500 mt-1">追蹤解約流程：通知 → 搬遷 → 公文 → 押金結算</p>
         </div>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
+        >
+          <FileX className="w-4 h-4" />
+          建立解約案件
+        </button>
       </div>
 
       {/* 統計卡片 */}
@@ -926,6 +988,139 @@ export default function Terminations() {
             >
               {cancelCase.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
               確認取消解約
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 建立解約案件 Modal */}
+      <Modal
+        isOpen={showCreateModal}
+        onClose={() => {
+          setShowCreateModal(false)
+          setContractSearch('')
+          setContractOptions([])
+        }}
+        title="建立解約案件"
+      >
+        <div className="space-y-4">
+          <div className="bg-red-50 p-3 rounded-lg text-sm text-red-700">
+            建立解約案件後，合約狀態將變更為「解約中」，該合約的待收款項將從應收帳款移除。
+          </div>
+
+          {/* 搜尋合約 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              搜尋合約（輸入合約編號或客戶名稱）*
+            </label>
+            <input
+              type="text"
+              value={contractSearch}
+              onChange={(e) => {
+                setContractSearch(e.target.value)
+                searchContracts(e.target.value)
+              }}
+              className="w-full px-3 py-2 border rounded-lg"
+              placeholder="例：HR-2025-001 或 陳玉美"
+            />
+            {/* 合約選項 */}
+            {contractOptions.length > 0 && (
+              <div className="mt-2 border rounded-lg max-h-48 overflow-y-auto">
+                {contractOptions.map(contract => (
+                  <button
+                    key={contract.id}
+                    onClick={() => {
+                      setCreateForm(prev => ({ ...prev, contract_id: contract.id }))
+                      setContractSearch(`${contract.contract_number} - ${contract.customers?.name || ''}`)
+                      setContractOptions([])
+                    }}
+                    className={`w-full px-3 py-2 text-left hover:bg-gray-100 border-b last:border-b-0 ${
+                      createForm.contract_id === contract.id ? 'bg-blue-50' : ''
+                    }`}
+                  >
+                    <div className="font-medium">{contract.contract_number}</div>
+                    <div className="text-sm text-gray-500">
+                      {contract.customers?.name}
+                      {contract.customers?.company_name && ` (${contract.customers.company_name})`}
+                      {' · '}到期: {contract.end_date}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {createForm.contract_id && (
+              <div className="mt-2 text-sm text-green-600">
+                ✓ 已選擇合約 ID: {createForm.contract_id}
+              </div>
+            )}
+          </div>
+
+          {/* 解約類型 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              解約類型 *
+            </label>
+            <select
+              value={createForm.termination_type}
+              onChange={(e) => setCreateForm(prev => ({ ...prev, termination_type: e.target.value }))}
+              className="w-full px-3 py-2 border rounded-lg"
+            >
+              <option value="not_renewing">到期不續約</option>
+              <option value="early">提前解約</option>
+              <option value="breach">違約終止</option>
+            </select>
+          </div>
+
+          {/* 通知日期 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              客戶通知日期
+            </label>
+            <input
+              type="date"
+              value={createForm.notice_date}
+              onChange={(e) => setCreateForm(prev => ({ ...prev, notice_date: e.target.value }))}
+              className="w-full px-3 py-2 border rounded-lg"
+            />
+          </div>
+
+          {/* 備註 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              備註
+            </label>
+            <textarea
+              value={createForm.notes}
+              onChange={(e) => setCreateForm(prev => ({ ...prev, notes: e.target.value }))}
+              className="w-full px-3 py-2 border rounded-lg"
+              rows={2}
+              placeholder="例：客戶口頭告知要搬遷"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <button
+              onClick={() => {
+                setShowCreateModal(false)
+                setContractSearch('')
+                setContractOptions([])
+              }}
+              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+            >
+              取消
+            </button>
+            <button
+              onClick={() => createCase.mutate({
+                contract_id: createForm.contract_id,
+                termination_type: createForm.termination_type,
+                notice_date: createForm.notice_date,
+                notes: createForm.notes
+              })}
+              disabled={createCase.isPending || !createForm.contract_id}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {createCase.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+              建立解約案件
             </button>
           </div>
         </div>
