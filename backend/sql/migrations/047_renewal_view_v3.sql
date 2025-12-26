@@ -13,12 +13,37 @@
 -- - completed: 完成（next_contract.status = active）
 -- ============================================================================
 
--- 先刪除依賴的視圖
-DROP VIEW IF EXISTS v_monthly_reminders_summary CASCADE;
-DROP VIEW IF EXISTS v_renewal_reminders CASCADE;
+-- ============================================================================
+-- 0. 先新增欄位（視圖會用到）
+-- ============================================================================
+
+-- 新增 sent_for_sign_at 欄位
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'contracts' AND column_name = 'sent_for_sign_at'
+    ) THEN
+        ALTER TABLE contracts ADD COLUMN sent_for_sign_at TIMESTAMPTZ;
+        COMMENT ON COLUMN contracts.sent_for_sign_at IS '送簽時間（業務送出合約給客戶簽署）';
+    END IF;
+END $$;
+
+-- 標記 deprecated 欄位
+COMMENT ON COLUMN contracts.renewal_signed_at IS '[DEPRECATED] 續約簽約時間 - 請改用 next_contract.signed_at';
+COMMENT ON COLUMN contracts.renewal_paid_at IS '[DEPRECATED] 續約已收款時間 - 請改用 payments.payment_status 計算';
+COMMENT ON COLUMN contracts.renewal_invoiced_at IS '[DEPRECATED] 續約已開票時間 - 請改用 invoices.status 計算';
 
 -- ============================================================================
--- 1. 重建 v_renewal_reminders 視圖
+-- 1. 刪除依賴的視圖
+-- ============================================================================
+
+DROP VIEW IF EXISTS v_monthly_reminders_summary CASCADE;
+DROP VIEW IF EXISTS v_renewal_reminders CASCADE;
+DROP VIEW IF EXISTS v_pending_sign_contracts CASCADE;
+
+-- ============================================================================
+-- 2. 重建 v_renewal_reminders 視圖
 -- ============================================================================
 
 CREATE VIEW v_renewal_reminders AS
@@ -38,7 +63,7 @@ first_payments AS (
     -- 找出每張續約合約的第一期付款狀態
     SELECT DISTINCT ON (contract_id)
         contract_id,
-        status AS payment_status,
+        payment_status,
         paid_at
     FROM payments
     WHERE payment_type = 'rent'
@@ -161,7 +186,7 @@ COMMENT ON VIEW v_renewal_reminders IS '續約提醒視圖（V3）- 三段式狀
 GRANT SELECT ON v_renewal_reminders TO anon, authenticated;
 
 -- ============================================================================
--- 2. 重建 v_monthly_reminders_summary
+-- 3. 重建 v_monthly_reminders_summary
 -- ============================================================================
 
 CREATE VIEW v_monthly_reminders_summary AS
@@ -180,7 +205,7 @@ GROUP BY branch_id, branch_name;
 GRANT SELECT ON v_monthly_reminders_summary TO anon, authenticated;
 
 -- ============================================================================
--- 3. 建立待簽列表視圖
+-- 4. 建立待簽列表視圖
 -- ============================================================================
 
 CREATE VIEW v_pending_sign_contracts AS
@@ -213,7 +238,7 @@ SELECT
     EXISTS(
         SELECT 1 FROM payments p
         WHERE p.contract_id = c.id
-        AND p.status = 'paid'
+        AND p.payment_status = 'paid'
     ) AS has_paid_but_not_signed,
     -- 催簽次數（從 notification_logs 計算，如果有的話）
     COALESCE(
@@ -236,30 +261,6 @@ ORDER BY
 COMMENT ON VIEW v_pending_sign_contracts IS '待簽合約列表 - 追蹤等待客戶回簽的合約';
 
 GRANT SELECT ON v_pending_sign_contracts TO anon, authenticated;
-
--- ============================================================================
--- 4. 新增 sent_for_sign_at 欄位（可選，之後用）
--- ============================================================================
-
--- 先檢查欄位是否存在
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'contracts' AND column_name = 'sent_for_sign_at'
-    ) THEN
-        ALTER TABLE contracts ADD COLUMN sent_for_sign_at TIMESTAMPTZ;
-        COMMENT ON COLUMN contracts.sent_for_sign_at IS '送簽時間（業務送出合約給客戶簽署）';
-    END IF;
-END $$;
-
--- ============================================================================
--- 5. 加入欄位註解標記 deprecated
--- ============================================================================
-
-COMMENT ON COLUMN contracts.renewal_signed_at IS '[DEPRECATED] 續約簽約時間 - 請改用 next_contract.signed_at';
-COMMENT ON COLUMN contracts.renewal_paid_at IS '[DEPRECATED] 續約已收款時間 - 請改用 payments.status 計算';
-COMMENT ON COLUMN contracts.renewal_invoiced_at IS '[DEPRECATED] 續約已開票時間 - 請改用 invoices.status 計算';
 
 -- ============================================================================
 -- 完成
