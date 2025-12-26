@@ -137,12 +137,13 @@ Timeout 在 API 成功後、本地更新前：
 
 ### 3.3 各流程解決方案
 
-| 流程 | 方案 | 實作狀態 |
-|------|------|---------|
-| 續約流程 | 草稿機制 + PostgreSQL Function | ✅ 已實作 (039_renewal_v2.sql) |
-| 解約流程 | 草稿機制 + PostgreSQL Function | ⏳ 待實作 |
-| 免收核准 | PostgreSQL Function | ⏳ 待實作 |
-| 發票開立 | 冪等性 Key + 狀態追蹤 | ⏳ 待實作 |
+| 流程 | 方案 | 實作狀態 | 相關檔案 |
+|------|------|---------|---------|
+| 續約流程 | 草稿機制 + PostgreSQL Function | ✅ 已完成 | 039_renewal_v2.sql |
+| 解約流程 | PostgreSQL Function Transaction | ✅ 已完成 | 040_termination_v2.sql |
+| 免收核准 | PostgreSQL Function Transaction | ✅ 已完成 | 042_waive_approval_transaction.sql |
+| 發票開立 | 冪等性 Key + 操作追蹤 | ✅ 已完成 | 041_invoice_idempotency.sql |
+| 欄位保護 | DB Trigger 保護 + 白名單放行 | ✅ 已完成 | 043_protect_contract_status.sql |
 
 ---
 
@@ -374,15 +375,49 @@ CREATE TABLE invoice_operations (
 
 ---
 
-## 7. 實作優先順序
+## 7. 實作完成狀態
 
-| 優先級 | 流程 | 理由 |
-|--------|------|------|
-| P0 | 續約流程 | 已實作完成 |
-| P1 | 解約流程 | 涉及押金退還，金額大、影響嚴重 |
-| P1 | 發票開立 | 涉及外部系統，錯誤難以回復 |
-| P2 | 免收核准 | 內部操作，影響相對小 |
-| P2 | 合約終止 | 低頻操作 |
+| 優先級 | 流程 | 狀態 | 完成日期 |
+|--------|------|------|---------|
+| P0 | 續約流程 | ✅ 已完成 | 2025-12-26 |
+| P1 | 解約流程 | ✅ 已完成 | 2025-12-26 |
+| P1 | 發票開立 | ✅ 已完成 | 2025-12-26 |
+| P2 | 免收核准 | ✅ 已完成 | 2025-12-26 |
+| P2 | 欄位保護 | ✅ 已完成 | 2025-12-26 |
+
+### 7.1 欄位保護機制
+
+為防止前端直接 PATCH `contracts.status` 或 `renewed_from_id` 繞過業務邏輯，新增 DB Trigger 保護：
+
+```sql
+-- 保護關鍵欄位（043_protect_contract_status.sql）
+CREATE OR REPLACE FUNCTION protect_contract_critical_fields()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- 允許來自 PostgreSQL Function 的修改（透過 set_config 白名單）
+    IF current_setting('app.from_rpc', true) IS NOT NULL THEN
+        RETURN NEW;
+    END IF;
+
+    -- 阻止直接修改 status
+    IF OLD.status IS DISTINCT FROM NEW.status THEN
+        RAISE EXCEPTION '禁止直接修改合約狀態。請使用續約/解約專用 API。';
+    END IF;
+
+    -- 阻止直接修改 renewed_from_id
+    IF OLD.renewed_from_id IS DISTINCT FROM NEW.renewed_from_id THEN
+        RAISE EXCEPTION '禁止直接修改續約關聯。請使用續約專用 API。';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**白名單機制**：
+- PostgreSQL Function 在執行前呼叫 `set_config('app.from_rpc', 'true', true)`
+- Trigger 檢查此設定，如存在則放行
+- 前端/PostgREST 無法設定此 session variable，確保安全
 
 ---
 

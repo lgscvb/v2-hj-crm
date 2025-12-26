@@ -180,10 +180,84 @@
 
 ---
 
+## 7. 單一路徑與寫入治理 (Write Governance)
+
+### 核心原則
+
+> **分模組開發不是問題，沒有跨模組的業務流程邊界才是問題。**
+
+### 每個業務流程必須定義：
+
+| 項目 | 說明 | 範例（續約） |
+|------|------|-------------|
+| **唯一入口** | 只有一個 API 可以觸發狀態變更 | `renewal_activate` |
+| **寫入權限** | 哪些角色可以寫哪些欄位 | 前端不可改 `status` |
+| **完成判定** | 什麼條件下算「完成」 | 新合約 active + 舊合約 renewed |
+
+### 寫入治理表（本專案）
+
+| 欄位 | 誰可以寫 | 強制層級 |
+|------|---------|---------|
+| `contracts.status` | PostgreSQL Function only | DB Trigger |
+| `contracts.renewed_from_id` | PostgreSQL Function only | DB Trigger |
+| `contracts.renewal_*_at` | 前端可寫（顯示用） | 無限制 |
+| `payments.payment_status` | MCP Tool only | 後端驗證 |
+
+---
+
+## 8. 跨模組不變量 (Cross-Module Invariants)
+
+### 必須列出並指定強制層級
+
+| 不變量 | 強制層級 | 實作方式 |
+|--------|---------|---------|
+| 同期間不得兩張 active 合約重疊 | DB | Exclusion Constraint（待實作） |
+| 舊約標 renewed 必須存在新約關聯 | DB | Trigger 檢查 |
+| 有 draft/active 新約就不出現在提醒 | View | WHERE NOT EXISTS |
+| 解約完成必須所有待繳取消 | DB | Function Transaction |
+
+### 問自己：
+
+- [ ] 這個規則誰負責保證？（不能是「大家以為別人會處理」）
+- [ ] 如果有人繞過這個規則，系統會怎樣？
+- [ ] 這個規則寫在 DB/Domain/UI 哪一層？
+
+---
+
+## 9. 模組介面設計 (Module Interface)
+
+### 反模式：共享表格當介面
+
+```
+❌ 模組 A 直接寫 contracts 表
+❌ 模組 B 也直接寫 contracts 表
+→ 誰都可以改，誰都不知道對方改了什麼
+```
+
+### 正確做法：Command/RPC 當介面
+
+```
+✅ 模組 A 呼叫 renewal_activate()
+✅ 模組 B 呼叫 termination_complete()
+→ 只有定義好的入口，有驗證、有 Transaction
+```
+
+---
+
 ## 本專案已踩過的坑
 
-| 功能 | 問題 | 解法 | 文件 |
+| 功能 | 問題 | 解法 | 狀態 |
 |------|------|------|------|
-| 續約流程 | Checklist 只改欄位，沒建新合約 | 兩階段提交 + Transaction | [SSD-v1.5](SSD-v1.5-renewal-draft.md) |
-| 解約流程 | 多表操作無 Transaction | ⏳ 待修復 | [PRD-v2.5](PRD-v2.5-data-consistency.md) |
-| 發票開立 | 外部 API 成功但本地更新失敗 | ⏳ 待修復 | [PRD-v2.5](PRD-v2.5-data-consistency.md) |
+| 續約流程 | Checklist 只改欄位，沒建新合約 | 兩階段提交 + Transaction | ✅ 已修復 |
+| 解約流程 | 多表操作無 Transaction | PostgreSQL Function | ✅ 已修復 |
+| 發票開立 | 外部 API 成功但本地更新失敗 | 冪等性操作追蹤 | ✅ 已修復 |
+| 免收核准 | 付款和申請狀態不同步 | PostgreSQL Function | ✅ 已修復 |
+| 直接 PATCH status | 繞過業務邏輯 | DB Trigger 保護 | ✅ 已修復 |
+
+---
+
+## 相關文件
+
+- [STD-contract-status.md](STD-contract-status.md) - 合約狀態轉換圖
+- [PRD-v2.5-data-consistency.md](PRD-v2.5-data-consistency.md) - 資料一致性問題清單
+- [SSD-v1.5-renewal-draft.md](SSD-v1.5-renewal-draft.md) - 續約草稿 API 規格

@@ -454,6 +454,41 @@ ORDER BY ct.end_date ASC;
 
 ---
 
+## 8. 欄位保護機制
+
+### 8.1 DB Trigger 保護
+
+為防止直接透過 PostgREST PATCH 修改 `contracts.status` 和 `renewed_from_id`，新增 DB Trigger：
+
+```sql
+-- 043_protect_contract_status.sql
+CREATE TRIGGER tr_protect_contract_critical_fields
+    BEFORE UPDATE ON contracts
+    FOR EACH ROW
+    EXECUTE FUNCTION protect_contract_critical_fields();
+```
+
+### 8.2 白名單機制
+
+PostgreSQL Function 需要修改這些欄位時，透過 `set_config` 設定 session variable 繞過 Trigger：
+
+```sql
+-- 在 Function 開頭加入
+PERFORM set_config('app.from_rpc', 'true', true);
+```
+
+### 8.3 受影響的 Functions
+
+| Function | 說明 |
+|----------|------|
+| `activate_renewal` | 啟用續約草稿 |
+| `cancel_renewal_draft` | 取消續約草稿 |
+| `activate_termination_case` | 啟用解約案件 |
+| `complete_termination` | 完成解約 |
+| `cancel_termination_case` | 取消解約案件 |
+
+---
+
 ## 附錄：Timeout 場景測試
 
 ### 場景 A：Stage 1 Timeout
