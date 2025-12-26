@@ -26,7 +26,10 @@ import {
   X,
   Loader2,
   XCircle,
-  ArrowRight
+  ArrowRight,
+  FilePlus,
+  Play,
+  Trash2
 } from 'lucide-react'
 
 // ============================================================================
@@ -267,7 +270,9 @@ export default function Renewals() {
   const [showReminderModal, setShowReminderModal] = useState(false)
   const [showChecklistModal, setShowChecklistModal] = useState(false)
   const [showNotRenewModal, setShowNotRenewModal] = useState(false)
+  const [showRenewalDraftModal, setShowRenewalDraftModal] = useState(false)
   const [selectedContract, setSelectedContract] = useState(null)
+  const [renewalDraft, setRenewalDraft] = useState(null)
   const [statusFilter, setStatusFilter] = useState('all')
   const [branchFilter, setBranchFilter] = useState('')
   const [pageSize, setPageSize] = useState(15)
@@ -275,6 +280,14 @@ export default function Renewals() {
   const [reminderText, setReminderText] = useState('')
   const [renewalNotes, setRenewalNotes] = useState('')
   const [notRenewNotes, setNotRenewNotes] = useState('')
+  const [draftForm, setDraftForm] = useState({
+    start_date: '',
+    end_date: '',
+    monthly_rent: '',
+    payment_cycle: '',
+    position_number: '',
+    notes: ''
+  })
   const queryClient = useQueryClient()
 
   // 初始化欄位顯示狀態
@@ -361,6 +374,49 @@ export default function Renewals() {
     }
   })
 
+  // 建立續約草稿
+  const createRenewalDraft = useMutation({
+    mutationFn: async (params) => {
+      return callTool('renewal_create_draft', params)
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        setRenewalDraft(result.draft)
+        queryClient.invalidateQueries({ queryKey: ['renewal-reminders'] })
+      }
+    }
+  })
+
+  // 啟用續約草稿
+  const activateRenewal = useMutation({
+    mutationFn: async ({ draftId }) => {
+      return callTool('renewal_activate', { draft_id: draftId })
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        setShowRenewalDraftModal(false)
+        setShowChecklistModal(false)
+        setSelectedContract(null)
+        setRenewalDraft(null)
+        queryClient.invalidateQueries({ queryKey: ['renewal-reminders'] })
+        navigate(`/contracts/${result.new_contract_id || result.draft_id}`)
+      }
+    }
+  })
+
+  // 取消續約草稿
+  const cancelRenewalDraft = useMutation({
+    mutationFn: async ({ draftId, reason }) => {
+      return callTool('renewal_cancel_draft', { draft_id: draftId, reason })
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        setRenewalDraft(null)
+        queryClient.invalidateQueries({ queryKey: ['renewal-reminders'] })
+      }
+    }
+  })
+
   // 處理 Checklist 更新
   const handleChecklistUpdate = (flag, value) => {
     if (!selectedContract) return
@@ -368,6 +424,45 @@ export default function Renewals() {
       contractId: selectedContract.id,
       flag,
       value
+    })
+  }
+
+  // 打開續約草稿 Modal
+  const openRenewalDraftModal = () => {
+    if (!selectedContract) return
+
+    // 計算新合約日期（舊合約到期日 + 1 天開始，預設續約一年）
+    const oldEndDate = new Date(selectedContract.end_date)
+    const newStartDate = new Date(oldEndDate)
+    newStartDate.setDate(newStartDate.getDate() + 1)
+    const newEndDate = new Date(newStartDate)
+    newEndDate.setFullYear(newEndDate.getFullYear() + 1)
+    newEndDate.setDate(newEndDate.getDate() - 1)
+
+    setDraftForm({
+      start_date: newStartDate.toISOString().split('T')[0],
+      end_date: newEndDate.toISOString().split('T')[0],
+      monthly_rent: selectedContract.monthly_rent || '',
+      payment_cycle: selectedContract.payment_cycle || 'monthly',
+      position_number: selectedContract.position_number || '',
+      notes: ''
+    })
+    setRenewalDraft(null)
+    setShowRenewalDraftModal(true)
+  }
+
+  // 提交續約草稿
+  const handleCreateDraft = () => {
+    if (!selectedContract || !draftForm.start_date || !draftForm.end_date) return
+
+    createRenewalDraft.mutate({
+      contract_id: selectedContract.id,
+      new_start_date: draftForm.start_date,
+      new_end_date: draftForm.end_date,
+      monthly_rent: draftForm.monthly_rent ? Number(draftForm.monthly_rent) : undefined,
+      payment_cycle: draftForm.payment_cycle || undefined,
+      position_number: draftForm.position_number || undefined,
+      notes: draftForm.notes || undefined
     })
   }
 
@@ -1024,8 +1119,31 @@ export default function Renewals() {
               </div>
             </div>
 
-            {/* 不續約按鈕 */}
-            <div className="pt-4 border-t">
+            {/* 建立續約 / 不續約按鈕 */}
+            <div className="pt-4 border-t space-y-3">
+              {/* 建立續約按鈕 - Checklist 完成後顯示 */}
+              {(() => {
+                const flags = computeFlags(selectedContract)
+                const allDone = flags.is_notified && flags.is_confirmed &&
+                  flags.is_paid && flags.is_invoiced && flags.is_signed
+                return allDone ? (
+                  <button
+                    onClick={openRenewalDraftModal}
+                    className="w-full py-3 px-4 bg-green-50 border border-green-200 rounded-lg text-green-700 hover:bg-green-100 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <FilePlus className="w-5 h-5" />
+                    建立續約合約
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </button>
+                ) : (
+                  <div className="p-3 bg-gray-50 rounded-lg text-center">
+                    <p className="text-sm text-gray-500">
+                      完成所有 Checklist 項目後即可建立續約合約
+                    </p>
+                  </div>
+                )
+              })()}
+
               <button
                 onClick={() => setShowNotRenewModal(true)}
                 className="w-full py-3 px-4 bg-red-50 border border-red-200 rounded-lg text-red-700 hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
@@ -1034,7 +1152,7 @@ export default function Renewals() {
                 客戶表示不續約
                 <ArrowRight className="w-4 h-4 ml-2" />
               </button>
-              <p className="text-xs text-gray-500 text-center mt-2">
+              <p className="text-xs text-gray-500 text-center">
                 將建立解約案件並進入解約流程
               </p>
             </div>
@@ -1169,6 +1287,254 @@ export default function Renewals() {
             {createTerminationCase.isError && (
               <div className="p-3 bg-red-100 border border-red-200 rounded-lg text-red-700 text-sm">
                 建立解約案件失敗：{createTerminationCase.error?.message || '未知錯誤'}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* 續約草稿 Modal */}
+      <Modal
+        open={showRenewalDraftModal}
+        onClose={() => {
+          setShowRenewalDraftModal(false)
+          setRenewalDraft(null)
+        }}
+        title={renewalDraft ? '確認續約草稿' : '建立續約合約'}
+        size="lg"
+        footer={
+          renewalDraft ? (
+            <>
+              <button
+                onClick={() => {
+                  cancelRenewalDraft.mutate({
+                    draftId: renewalDraft.id,
+                    reason: '使用者取消'
+                  })
+                }}
+                disabled={cancelRenewalDraft.isPending}
+                className="btn-secondary"
+              >
+                {cancelRenewalDraft.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    取消中...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    刪除草稿
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => activateRenewal.mutate({ draftId: renewalDraft.id })}
+                disabled={activateRenewal.isPending}
+                className="btn-primary"
+              >
+                {activateRenewal.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    啟用中...
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4 mr-2" />
+                    確認啟用續約
+                  </>
+                )}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setShowRenewalDraftModal(false)}
+                className="btn-secondary"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreateDraft}
+                disabled={createRenewalDraft.isPending || !draftForm.start_date || !draftForm.end_date}
+                className="btn-primary"
+              >
+                {createRenewalDraft.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    建立中...
+                  </>
+                ) : (
+                  <>
+                    <FilePlus className="w-4 h-4 mr-2" />
+                    建立續約草稿
+                  </>
+                )}
+              </button>
+            </>
+          )
+        }
+      >
+        {selectedContract && (
+          <div className="space-y-6">
+            {/* 原合約資訊 */}
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+              <h4 className="font-medium text-blue-800 mb-2">原合約資訊</h4>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-500">客戶</p>
+                  <p className="font-medium">{selectedContract.customer_name}</p>
+                  {selectedContract.company_name && (
+                    <p className="text-gray-600">{selectedContract.company_name}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-gray-500">合約編號</p>
+                  <p className="font-medium">{selectedContract.contract_number}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">到期日</p>
+                  <p className="font-medium text-red-600">{selectedContract.end_date}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">月租金</p>
+                  <p className="font-medium">${(selectedContract.monthly_rent || 0).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">繳費週期</p>
+                  <p className="font-medium">{CYCLE_LABEL[selectedContract.payment_cycle] || selectedContract.payment_cycle}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">座位編號</p>
+                  <p className="font-medium">{selectedContract.position_number || '-'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 草稿建立成功 */}
+            {renewalDraft ? (
+              <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                <div className="flex items-start gap-3">
+                  <CheckCircle className="w-6 h-6 text-green-500 flex-shrink-0" />
+                  <div>
+                    <h4 className="font-medium text-green-800">續約草稿已建立</h4>
+                    <p className="text-sm text-green-600 mt-1">
+                      草稿編號：{renewalDraft.contract_number}
+                    </p>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-gray-500">開始日期：</span>
+                        <span className="font-medium">{renewalDraft.start_date}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">結束日期：</span>
+                        <span className="font-medium">{renewalDraft.end_date}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">月租金：</span>
+                        <span className="font-medium">${(renewalDraft.monthly_rent || 0).toLocaleString()}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">繳費週期：</span>
+                        <span className="font-medium">{CYCLE_LABEL[renewalDraft.payment_cycle] || renewalDraft.payment_cycle}</span>
+                      </div>
+                    </div>
+                    <p className="text-sm text-amber-600 mt-3">
+                      ⚠️ 點擊「確認啟用續約」後，原合約將標記為已續約，新合約生效
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* 草稿表單 */
+              <div className="space-y-4">
+                <h4 className="font-medium text-gray-900">新合約資訊</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      開始日期 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={draftForm.start_date}
+                      onChange={(e) => setDraftForm(prev => ({ ...prev, start_date: e.target.value }))}
+                      className="input w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      結束日期 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={draftForm.end_date}
+                      onChange={(e) => setDraftForm(prev => ({ ...prev, end_date: e.target.value }))}
+                      className="input w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      月租金
+                    </label>
+                    <input
+                      type="number"
+                      value={draftForm.monthly_rent}
+                      onChange={(e) => setDraftForm(prev => ({ ...prev, monthly_rent: e.target.value }))}
+                      placeholder="沿用原合約"
+                      className="input w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      繳費週期
+                    </label>
+                    <select
+                      value={draftForm.payment_cycle}
+                      onChange={(e) => setDraftForm(prev => ({ ...prev, payment_cycle: e.target.value }))}
+                      className="input w-full"
+                    >
+                      <option value="monthly">月繳</option>
+                      <option value="quarterly">季繳</option>
+                      <option value="semi_annual">半年繳</option>
+                      <option value="annual">年繳</option>
+                      <option value="biennial">兩年繳</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      座位編號
+                    </label>
+                    <input
+                      type="text"
+                      value={draftForm.position_number}
+                      onChange={(e) => setDraftForm(prev => ({ ...prev, position_number: e.target.value }))}
+                      placeholder="沿用原合約"
+                      className="input w-full"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    備註
+                  </label>
+                  <textarea
+                    value={draftForm.notes}
+                    onChange={(e) => setDraftForm(prev => ({ ...prev, notes: e.target.value }))}
+                    placeholder="選填備註..."
+                    className="input w-full h-20 resize-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* 錯誤訊息 */}
+            {createRenewalDraft.isError && (
+              <div className="p-3 bg-red-100 border border-red-200 rounded-lg text-red-700 text-sm">
+                建立草稿失敗：{createRenewalDraft.error?.message || '未知錯誤'}
+              </div>
+            )}
+            {activateRenewal.isError && (
+              <div className="p-3 bg-red-100 border border-red-200 rounded-lg text-red-700 text-sm">
+                啟用續約失敗：{activateRenewal.error?.message || '未知錯誤'}
               </div>
             )}
           </div>
