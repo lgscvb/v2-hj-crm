@@ -325,7 +325,7 @@ export default function Dashboard() {
         const statusCounts = terminationCases.reduce((acc, c) => {
           acc[c.status] = (acc[c.status] || 0) + 1
           return acc
-        }, { notice_received: 0, moving_out: 0, pending_doc: 0, pending_settlement: 0 })
+        }, { notice_received: 0, moving_out: 0, pending_doc: 0, pending_settlement: 0, pending_authority: 0 })
 
         return (
           <div className="card cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/terminations')}>
@@ -336,7 +336,7 @@ export default function Dashboard() {
               </h3>
               <Badge variant="danger">{terminationCases.length} 件</Badge>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {/* 已通知 */}
               <div className="bg-yellow-100 text-yellow-700 rounded-lg p-3 text-center">
                 <div className="text-2xl font-bold">{statusCounts.notice_received}</div>
@@ -358,6 +358,13 @@ export default function Dashboard() {
                 <div className="text-2xl font-bold">{statusCounts.pending_settlement}</div>
                 <div className="text-xs">押金結算</div>
               </div>
+              {/* 呆帳通報 */}
+              {statusCounts.pending_authority > 0 && (
+                <div className="bg-red-100 text-red-700 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold">{statusCounts.pending_authority}</div>
+                  <div className="text-xs">呆帳通報</div>
+                </div>
+              )}
             </div>
           </div>
         )
