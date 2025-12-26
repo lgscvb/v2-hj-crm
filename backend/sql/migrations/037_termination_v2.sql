@@ -68,6 +68,9 @@ COMMENT ON COLUMN termination_cases.arrears_amount IS '欠款金額（未繳帳�
 -- 3. 修改 v_payments_due：排除解約中合約的款項
 -- ============================================================================
 
+-- 先刪除再重建（因為欄位結構有變）
+DROP VIEW IF EXISTS v_payments_due CASCADE;
+
 CREATE OR REPLACE VIEW v_payments_due AS
 SELECT
     p.id,
@@ -125,6 +128,9 @@ COMMENT ON VIEW v_payments_due IS '應收款列表（排除解約中合約），
 -- ============================================================================
 -- 4. 修改 v_termination_cases：新增待收款統計與合約類型
 -- ============================================================================
+
+-- 先刪除再重建（因為欄位結構有變）
+DROP VIEW IF EXISTS v_termination_cases CASCADE;
 
 CREATE OR REPLACE VIEW v_termination_cases AS
 SELECT
