@@ -35,45 +35,63 @@ import {
 // ============================================================================
 // Checklist 相關：Computed Flags 和 Display Status
 // ============================================================================
+//
+// V3 設計（SSOT）：
+// - 可勾選：已通知、已確認（意願管理）
+// - 唯讀顯示：已收款、已開票（從 payment/invoice 計算）
+// - 已移除：已簽約（去待簽列表追蹤）
+//
+// 欄位來源：
+// - is_notified: renewal_notified_at（可寫入）
+// - is_confirmed: renewal_confirmed_at（可寫入）
+// - is_paid: is_first_payment_paid（從視圖計算，SSOT）
+// - is_invoiced: first_payment_status 或 invoice_status
+// ============================================================================
 
-// 從時間戳計算 flags
+// 從視圖欄位計算 flags（V3 SSOT 設計）
 function computeFlags(contract) {
   return {
+    // 可手動更新的意願管理欄位
     is_notified: !!contract.renewal_notified_at,
     is_confirmed: !!contract.renewal_confirmed_at,
-    is_paid: !!contract.renewal_paid_at,
-    is_signed: !!contract.renewal_signed_at,
+    // 唯讀：從 payment/invoice 計算（SSOT）
+    // 優先使用新欄位，fallback 到舊欄位（向後相容）
+    is_paid: contract.is_first_payment_paid ?? !!contract.renewal_paid_at,
     is_invoiced: contract.invoice_status && contract.invoice_status !== 'pending_tax_id'
+    // is_signed 已移除，簽約狀態改由待簽列表追蹤
   }
 }
 
-// 根據 flags 計算顯示狀態
+// 根據 flags 計算顯示狀態（4 項，不含已簽約）
 function getDisplayStatus(contract) {
   const flags = computeFlags(contract)
 
-  // 檢查是否全部完成
-  const allDone = flags.is_notified && flags.is_confirmed &&
-    flags.is_paid && flags.is_invoiced && flags.is_signed
-  if (allDone) return { label: '完成', stage: 'completed', progress: 5, issues: [] }
+  // 檢查意願管理是否完成（通知 + 確認）
+  const intentDone = flags.is_notified && flags.is_confirmed
+  // 檢查財務是否完成（收款 + 開票）
+  const financeDone = flags.is_paid && flags.is_invoiced
+  // 全部完成 = 意願 + 財務
+  const allDone = intentDone && financeDone
+
+  if (allDone) return { label: '可建立續約', stage: 'ready', progress: 4, issues: [] }
 
   // 檢查是否尚未開始
   const noneStarted = !flags.is_notified && !flags.is_confirmed &&
-    !flags.is_paid && !flags.is_invoiced && !flags.is_signed
+    !flags.is_paid && !flags.is_invoiced
   if (noneStarted) return { label: '待處理', stage: 'pending', progress: 0, issues: ['全部待處理'] }
 
-  // 收集缺漏項目
+  // 收集缺漏項目（4 項）
   const issues = []
   if (!flags.is_notified) issues.push('未通知')
   if (!flags.is_confirmed) issues.push('未確認')
   if (!flags.is_paid) issues.push('未收款')
   if (!flags.is_invoiced) issues.push('未開票')
-  if (!flags.is_signed) issues.push('未簽約')
 
   return {
     label: '進行中',
     stage: 'in_progress',
     issues,
-    progress: 5 - issues.length
+    progress: 4 - issues.length
   }
 }
 
@@ -140,20 +158,22 @@ const getPeriodAmount = (row) => {
 function ChecklistPopover({ contract, onUpdate, isUpdating }) {
   const flags = computeFlags(contract)
 
-  const items = [
+  // 可手動更新的意願管理項目
+  const editableItems = [
     { key: 'notified', label: '已通知', icon: Bell, checked: flags.is_notified, timestamp: contract.renewal_notified_at },
     { key: 'confirmed', label: '已確認', icon: CheckCircle, checked: flags.is_confirmed, timestamp: contract.renewal_confirmed_at },
-    { key: 'paid', label: '已收款', icon: Receipt, checked: flags.is_paid, timestamp: contract.renewal_paid_at },
-    { key: 'signed', label: '已簽約', icon: PenTool, checked: flags.is_signed, timestamp: contract.renewal_signed_at },
   ]
 
-  const invoiceItem = {
-    label: '已開票',
-    icon: FileText,
-    checked: flags.is_invoiced,
-    isInvoice: true,
-    status: contract.invoice_status
-  }
+  // 唯讀顯示的財務狀態（從 payment/invoice 計算，SSOT）
+  const readonlyItems = [
+    {
+      key: 'paid',
+      label: '已收款',
+      icon: Receipt,
+      checked: flags.is_paid,
+      hint: flags.is_paid ? '（付款管理）' : '→ 付款管理'
+    },
+  ]
 
   const formatTime = (ts) => {
     if (!ts) return null
@@ -166,10 +186,13 @@ function ChecklistPopover({ contract, onUpdate, isUpdating }) {
   }
 
   return (
-    <div className="p-3 min-w-[240px]">
+    <div className="p-3 min-w-[260px]">
       <h4 className="font-medium text-gray-900 mb-3 pb-2 border-b">續約進度 Checklist</h4>
-      <div className="space-y-2">
-        {items.map(({ key, label, icon: Icon, checked, timestamp }) => (
+
+      {/* 意願管理（可勾選） */}
+      <div className="space-y-2 mb-3">
+        <div className="text-xs text-gray-400 mb-1">意願管理</div>
+        {editableItems.map(({ key, label, icon: Icon, checked, timestamp }) => (
           <div key={key} className="flex items-center justify-between">
             <label className="flex items-center gap-2 cursor-pointer flex-1">
               <input
@@ -189,16 +212,49 @@ function ChecklistPopover({ contract, onUpdate, isUpdating }) {
             )}
           </div>
         ))}
+      </div>
 
-        {/* 發票狀態（獨立處理） */}
-        <div className="pt-2 mt-2 border-t">
-          <div className="flex items-center gap-2 mb-2">
-            <FileText className={`w-4 h-4 ${invoiceItem.checked ? 'text-green-500' : 'text-gray-400'}`} />
-            <span className={`text-sm ${invoiceItem.checked ? 'text-gray-900' : 'text-gray-500'}`}>
-              發票狀態
+      {/* 財務狀態（唯讀顯示） */}
+      <div className="pt-2 mt-2 border-t space-y-2">
+        <div className="text-xs text-gray-400 mb-1">財務狀態（唯讀）</div>
+        {readonlyItems.map(({ key, label, icon: Icon, checked, hint }) => (
+          <div key={key} className="flex items-center justify-between">
+            <div className="flex items-center gap-2 flex-1">
+              <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                checked ? 'bg-green-500 border-green-500' : 'border-gray-300 bg-gray-100'
+              }`}>
+                {checked && <Check className="w-3 h-3 text-white" />}
+              </div>
+              <Icon className={`w-4 h-4 ${checked ? 'text-green-500' : 'text-gray-400'}`} />
+              <span className={`text-sm ${checked ? 'text-gray-900' : 'text-gray-500'}`}>
+                {label}
+              </span>
+            </div>
+            <span className="text-xs text-gray-400">{hint}</span>
+          </div>
+        ))}
+
+        {/* 發票狀態 */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 flex-1">
+            <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+              flags.is_invoiced ? 'bg-green-500 border-green-500' : 'border-gray-300 bg-gray-100'
+            }`}>
+              {flags.is_invoiced && <Check className="w-3 h-3 text-white" />}
+            </div>
+            <FileText className={`w-4 h-4 ${flags.is_invoiced ? 'text-green-500' : 'text-gray-400'}`} />
+            <span className={`text-sm ${flags.is_invoiced ? 'text-gray-900' : 'text-gray-500'}`}>
+              已開票
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-1 ml-6">
+          <span className="text-xs text-gray-400">
+            {flags.is_invoiced ? '（發票系統）' : '→ 發票系統'}
+          </span>
+        </div>
+
+        {/* 發票狀態選擇（暫時保留操作，過渡期） */}
+        <div className="ml-6 mt-1">
+          <div className="grid grid-cols-2 gap-1">
             {Object.entries(INVOICE_STATUSES).map(([key, { label }]) => (
               <button
                 key={key}
@@ -235,7 +291,7 @@ function ProgressBar({ progress, stage, onClick }) {
   const colors = {
     pending: 'bg-gray-200',
     in_progress: 'bg-blue-500',
-    completed: 'bg-green-500'
+    ready: 'bg-green-500'  // 可建立續約
   }
 
   return (
@@ -244,7 +300,8 @@ function ProgressBar({ progress, stage, onClick }) {
       className="flex items-center gap-2 group"
     >
       <div className="flex gap-0.5">
-        {[...Array(5)].map((_, i) => (
+        {/* 4 格進度條（已通知、已確認、已收款、已開票） */}
+        {[...Array(4)].map((_, i) => (
           <div
             key={i}
             className={`w-2 h-4 rounded-sm transition-colors ${
@@ -254,7 +311,7 @@ function ProgressBar({ progress, stage, onClick }) {
         ))}
       </div>
       <span className="text-xs text-gray-500 group-hover:text-gray-700">
-        {progress}/5
+        {progress}/4
       </span>
       <ChevronDown className="w-3 h-3 text-gray-400 group-hover:text-gray-600" />
     </button>
@@ -322,11 +379,11 @@ export default function Renewals() {
       queryClient.invalidateQueries({ queryKey: ['renewal-reminders'] })
       // 同步更新 selectedContract 以即時反映 UI 變化
       if (selectedContract && selectedContract.id === variables.contractId) {
+        // V3 設計：只有 notified 和 confirmed 可手動更新
+        // paid/signed 已移除（SSOT 由其他模組管理）
         const flagMap = {
           notified: 'renewal_notified_at',
-          confirmed: 'renewal_confirmed_at',
-          paid: 'renewal_paid_at',
-          signed: 'renewal_signed_at'
+          confirmed: 'renewal_confirmed_at'
         }
         const field = flagMap[variables.flag]
         if (field) {
@@ -335,6 +392,7 @@ export default function Renewals() {
             [field]: variables.value ? new Date().toISOString() : null
           }))
         } else if (variables.flag === 'invoice') {
+          // 發票狀態暫時保留操作（過渡期）
           setSelectedContract(prev => ({
             ...prev,
             invoice_status: variables.value
