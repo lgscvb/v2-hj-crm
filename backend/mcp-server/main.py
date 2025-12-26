@@ -118,6 +118,44 @@ async def postgrest_request(
         return response.json()
 
 
+async def postgrest_rpc(
+    function_name: str,
+    params: dict = None
+) -> Any:
+    """
+    呼叫 PostgreSQL Function（透過 PostgREST RPC）
+
+    用於原子性操作，確保多表更新在同一 Transaction 內
+    """
+    url = f"{settings.postgrest_url}/rpc/{function_name}"
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            url=url,
+            json=params or {},
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
+            timeout=30.0
+        )
+
+        if response.status_code >= 400:
+            logger.error(f"PostgREST RPC error: {response.status_code} - {response.text}")
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=response.text
+            )
+
+        result = response.json()
+
+        # PostgreSQL Function 回傳的 JSONB 會被包在陣列中
+        if isinstance(result, list) and len(result) == 1:
+            return result[0]
+
+        return result
+
+
 # ============================================================================
 # MCP Tools - CRM 查詢工具
 # ============================================================================
@@ -326,6 +364,20 @@ from tools.termination_tools import (
     get_termination_case,
     cancel_termination_case,
     set_postgrest_request as set_termination_postgrest
+)
+
+# Termination V2 - Transaction 保護（修復多表操作原子性）
+from tools.termination_tools_v2 import (
+    termination_create_case_v2,
+    termination_complete_v2,
+    termination_cancel_v2,
+    termination_update_status_v2,
+    termination_update_checklist,
+    termination_calculate_settlement,
+    termination_get_cases,
+    termination_get_case,
+    set_postgrest_request as set_termination_v2_postgrest,
+    set_postgrest_rpc as set_termination_v2_rpc
 )
 
 
@@ -1035,6 +1087,51 @@ MCP_TOOLS = {
         "handler": cancel_termination_case
     },
 
+    # ==========================================================================
+    # Termination V2 - Transaction 保護（修復多表操作原子性問題）
+    # 建議使用 V2 版本，確保資料一致性
+    # ==========================================================================
+    "termination_create_case_v2": {
+        "description": "建立解約案件 V2（使用 Transaction 保護，確保資料一致性）",
+        "parameters": {
+            "contract_id": {"type": "integer", "description": "合約ID", "required": True},
+            "termination_type": {"type": "string", "description": "解約類型 (early=提前解約/not_renewing=到期不續約/breach=違約終止)", "optional": True},
+            "notice_date": {"type": "string", "description": "客戶通知日期 (YYYY-MM-DD)", "optional": True},
+            "expected_end_date": {"type": "string", "description": "預計搬離日期 (YYYY-MM-DD)", "optional": True},
+            "notes": {"type": "string", "description": "備註", "optional": True},
+            "created_by": {"type": "string", "description": "建立者", "optional": True}
+        },
+        "handler": termination_create_case_v2
+    },
+    "termination_complete_v2": {
+        "description": "完成解約流程 V2（使用 Transaction 保護：更新案件 + 更新合約 + 取消待繳款項）",
+        "parameters": {
+            "case_id": {"type": "integer", "description": "解約案件ID", "required": True},
+            "refund_method": {"type": "string", "description": "退款方式 (cash=現金/transfer=匯款/check=支票)", "required": True},
+            "refund_account": {"type": "string", "description": "退款帳戶（匯款時需要）", "optional": True},
+            "refund_receipt": {"type": "string", "description": "收據編號", "optional": True},
+            "notes": {"type": "string", "description": "備註", "optional": True}
+        },
+        "handler": termination_complete_v2
+    },
+    "termination_cancel_v2": {
+        "description": "取消解約案件 V2（使用 Transaction 保護：取消案件 + 恢復合約狀態）",
+        "parameters": {
+            "case_id": {"type": "integer", "description": "解約案件ID", "required": True},
+            "reason": {"type": "string", "description": "取消原因", "required": True}
+        },
+        "handler": termination_cancel_v2
+    },
+    "termination_update_status_v2": {
+        "description": "更新解約案件狀態 V2（注意：完成或取消請使用專用工具）",
+        "parameters": {
+            "case_id": {"type": "integer", "description": "解約案件ID", "required": True},
+            "status": {"type": "string", "description": "新狀態 (notice_received/moving_out/pending_doc/pending_settlement)", "required": True},
+            "notes": {"type": "string", "description": "備註", "optional": True}
+        },
+        "handler": termination_update_status_v2
+    },
+
     # 系統設定工具
     "settings_get": {
         "description": "取得系統設定",
@@ -1575,6 +1672,11 @@ async def lifespan(app: FastAPI):
     # 設置解約工具的 postgrest_request
     set_termination_postgrest(postgrest_request)
     logger.info("Termination tools initialized")
+
+    # 設置解約工具 V2 的 postgrest_request 和 postgrest_rpc
+    set_termination_v2_postgrest(postgrest_request)
+    set_termination_v2_rpc(postgrest_rpc)
+    logger.info("Termination tools V2 initialized (with Transaction protection)")
 
     # 啟動排程器
     scheduler.add_job(send_booking_reminders, 'interval', minutes=10)
