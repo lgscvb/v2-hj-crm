@@ -267,6 +267,11 @@ export const db = {
 // ============================================================================
 
 export const crm = {
+  // 通用工具呼叫方法
+  async callTool(toolName, parameters = {}) {
+    return callTool(toolName, parameters)
+  },
+
   async searchCustomers(query, branchId, status, limit = 50) {
     // 直接使用資料庫查詢
     const params = { limit, order: 'created_at.desc' }

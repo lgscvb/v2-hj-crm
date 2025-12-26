@@ -209,6 +209,15 @@ from tools.renewal_tools_v2 import (
     renewal_list_cases
 )
 
+# Renewal V3 - Draft Mechanism (兩階段提交 + Transaction 保護)
+from tools.renewal_tools_v3 import (
+    renewal_check_draft,
+    renewal_create_draft,
+    renewal_update_draft,
+    renewal_activate,
+    renewal_cancel_draft
+)
+
 from tools.settings_tools import (
     settings_get,
     settings_update,
@@ -901,6 +910,51 @@ MCP_TOOLS = {
             "limit": {"type": "integer", "description": "回傳筆數", "default": 50}
         },
         "handler": renewal_list_cases
+    },
+
+    # ==========================================================================
+    # Renewal V3 - Draft Mechanism（兩階段提交 + Transaction 保護）
+    # ==========================================================================
+    "renewal_check_draft": {
+        "description": "檢查合約是否有續約草稿",
+        "parameters": {
+            "old_contract_id": {"type": "integer", "description": "原合約ID", "required": True}
+        },
+        "handler": renewal_check_draft
+    },
+    "renewal_create_draft": {
+        "description": "建立續約草稿（Stage 1: 安全，可 Timeout 恢復）",
+        "parameters": {
+            "old_contract_id": {"type": "integer", "description": "原合約ID", "required": True},
+            "new_data": {"type": "object", "description": "新合約資料（plan_name, monthly_rent, start_date, end_date, payment_cycle, position_number, notes）", "optional": True},
+            "idempotency_key": {"type": "string", "description": "冪等性 Key（防止重複提交）", "optional": True},
+            "created_by": {"type": "string", "description": "操作者", "optional": True}
+        },
+        "handler": renewal_create_draft
+    },
+    "renewal_update_draft": {
+        "description": "更新續約草稿",
+        "parameters": {
+            "draft_id": {"type": "integer", "description": "草稿合約ID", "required": True},
+            "updates": {"type": "object", "description": "要更新的欄位", "required": True}
+        },
+        "handler": renewal_update_draft
+    },
+    "renewal_activate": {
+        "description": "啟用續約草稿（Stage 2: Transaction 保護，原子性操作）",
+        "parameters": {
+            "draft_id": {"type": "integer", "description": "草稿合約ID", "required": True},
+            "activated_by": {"type": "string", "description": "操作者", "optional": True}
+        },
+        "handler": renewal_activate
+    },
+    "renewal_cancel_draft": {
+        "description": "取消續約草稿",
+        "parameters": {
+            "draft_id": {"type": "integer", "description": "草稿合約ID", "required": True},
+            "reason": {"type": "string", "description": "取消原因", "optional": True}
+        },
+        "handler": renewal_cancel_draft
     },
 
     # ==========================================================================
