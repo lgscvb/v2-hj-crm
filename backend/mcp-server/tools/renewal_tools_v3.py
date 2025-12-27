@@ -228,15 +228,17 @@ async def renewal_create_draft(
                 "existing_draft_id": existing["id"]
             }
 
-    # 5. 生成新合約編號
-    from tools.crm_tools import generate_contract_number
+    # 5. 沿用合約編號，遞增期數
     target_branch_id = branch_id or old_contract.get("branch_id")
-    new_contract_number = await generate_contract_number(target_branch_id)
+    old_contract_number = old_contract.get("contract_number")
+    old_period = old_contract.get("contract_period") or 1
+    new_period = old_period + 1
 
     # 6. 建立草稿合約
     try:
         new_contract_data = {
-            "contract_number": new_contract_number,
+            "contract_number": old_contract_number,  # 沿用原編號
+            "contract_period": new_period,           # 遞增期數
             "customer_id": old_contract.get("customer_id"),
             "branch_id": target_branch_id,
             "contract_type": old_contract.get("contract_type"),
@@ -264,7 +266,7 @@ async def renewal_create_draft(
             # 關聯與狀態
             "renewed_from_id": contract_id,
             "status": "renewal_draft",  # ★ 草稿狀態
-            "notes": notes or f"續約自 {old_contract.get('contract_number')}"
+            "notes": notes or f"第 {new_period} 期（續約自第 {old_period} 期）"
         }
 
         result = await postgrest_post("contracts", new_contract_data)
@@ -285,6 +287,7 @@ async def renewal_create_draft(
             "draft": {
                 "id": new_contract["id"],
                 "contract_number": new_contract.get("contract_number"),
+                "contract_period": new_period,
                 "start_date": new_start_date,
                 "end_date": new_end_date,
                 "monthly_rent": new_contract.get("monthly_rent"),
@@ -295,10 +298,11 @@ async def renewal_create_draft(
             "old_contract": {
                 "id": contract_id,
                 "contract_number": old_contract.get("contract_number"),
+                "contract_period": old_period,
                 "end_date": old_contract.get("end_date")
             },
             "idempotency_key": idempotency_key,
-            "message": "續約草稿已建立，請確認後啟用"
+            "message": f"續約草稿已建立（第 {new_period} 期），請確認後啟用"
         }
 
     except Exception as e:
