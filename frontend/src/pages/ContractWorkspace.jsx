@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { callTool } from '../services/api'
 import { useContractBillingCycles, useContractBillingSummary } from '../hooks/useApi'
 import Badge from '../components/Badge'
 import {
   ArrowLeft,
+  ArrowRight,
   Bell,
   CheckCircle,
   FileText,
@@ -15,6 +16,7 @@ import {
   AlertTriangle,
   ExternalLink,
   ChevronRight,
+  ChevronLeft,
   ChevronDown,
   ChevronUp,
   Building2,
@@ -26,7 +28,12 @@ import {
   XCircle,
   Circle,
   CreditCard,
-  DollarSign
+  DollarSign,
+  Plus,
+  Send,
+  PenLine,
+  History,
+  X
 } from 'lucide-react'
 
 // ============================================================================
@@ -114,10 +121,10 @@ function TimelineNode({ item, isLast }) {
 }
 
 // ============================================================================
-// Decision Panel 元件
+// Decision Panel 元件（含 Action 按鈕）
 // ============================================================================
 
-function DecisionPanel({ decision }) {
+function DecisionPanel({ decision, contract, nextContract, onAction, isLoading }) {
   if (!decision?.blocked_by) {
     return (
       <div className="bg-green-50 border border-green-200 rounded-lg p-4">
@@ -146,28 +153,155 @@ function DecisionPanel({ decision }) {
     Legal: 'bg-orange-100 text-orange-700'
   }
 
+  // 根據 blocked_by 決定可用動作
+  const getActions = () => {
+    const actions = []
+
+    switch (decision.blocked_by) {
+      case 'need_create_renewal':
+        actions.push({
+          key: 'create_draft',
+          label: '建立續約草稿',
+          icon: Plus,
+          variant: 'primary'
+        })
+        break
+      case 'need_send_for_sign':
+        if (nextContract?.id) {
+          actions.push({
+            key: 'send_for_sign',
+            label: '送出簽署',
+            icon: Send,
+            variant: 'primary',
+            targetId: nextContract.id
+          })
+        }
+        break
+      case 'waiting_for_sign':
+      case 'signing_overdue':
+        if (nextContract?.id) {
+          actions.push({
+            key: 'mark_signed',
+            label: '標記已簽回',
+            icon: PenLine,
+            variant: 'success',
+            targetId: nextContract.id
+          })
+          actions.push({
+            key: 'send_reminder',
+            label: '發送提醒',
+            icon: Bell,
+            variant: 'secondary',
+            targetId: nextContract.id
+          })
+        }
+        break
+      case 'need_activate':
+        if (nextContract?.id) {
+          actions.push({
+            key: 'activate',
+            label: '啟用合約',
+            icon: Play,
+            variant: 'success',
+            targetId: nextContract.id
+          })
+        }
+        break
+      case 'payment_pending':
+        actions.push({
+          key: 'go_payments',
+          label: '前往收款',
+          icon: Receipt,
+          variant: 'secondary',
+          isLink: true,
+          to: `/payments?contract_id=${nextContract?.id || contract?.id}`
+        })
+        break
+      case 'invoice_pending':
+        actions.push({
+          key: 'go_invoices',
+          label: '前往開票',
+          icon: FileText,
+          variant: 'secondary',
+          isLink: true,
+          to: `/invoices?contract_id=${nextContract?.id || contract?.id}`
+        })
+        break
+    }
+
+    return actions
+  }
+
+  const actions = getActions()
+
   return (
-    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <AlertTriangle className="w-5 h-5 text-yellow-500" />
-        <span className="font-medium text-yellow-700">
-          卡在：{blockedLabels[decision.blocked_by] || decision.blocked_by}
-        </span>
+    <div className="space-y-4">
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="w-5 h-5 text-yellow-500" />
+          <span className="font-medium text-yellow-700">
+            卡在：{blockedLabels[decision.blocked_by] || decision.blocked_by}
+          </span>
+        </div>
+
+        {decision.next_action && (
+          <div className="flex items-center gap-2 text-sm">
+            <ChevronRight className="w-4 h-4 text-gray-400" />
+            <span className="text-gray-700">下一步：{decision.next_action}</span>
+          </div>
+        )}
+
+        {decision.owner && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">責任人：</span>
+            <span className={`text-xs px-2 py-0.5 rounded ${ownerColors[decision.owner] || 'bg-gray-100 text-gray-700'}`}>
+              {decision.owner}
+            </span>
+          </div>
+        )}
       </div>
 
-      {decision.next_action && (
-        <div className="flex items-center gap-2 text-sm">
-          <ChevronRight className="w-4 h-4 text-gray-400" />
-          <span className="text-gray-700">下一步：{decision.next_action}</span>
-        </div>
-      )}
+      {/* Action 按鈕區 */}
+      {actions.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {actions.map((action) => {
+            const Icon = action.icon
+            const baseClass = "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            const variantClass = {
+              primary: 'bg-primary-600 text-white hover:bg-primary-700',
+              success: 'bg-green-600 text-white hover:bg-green-700',
+              secondary: 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }[action.variant] || 'bg-gray-100 text-gray-700 hover:bg-gray-200'
 
-      {decision.owner && (
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">責任人：</span>
-          <span className={`text-xs px-2 py-0.5 rounded ${ownerColors[decision.owner] || 'bg-gray-100 text-gray-700'}`}>
-            {decision.owner}
-          </span>
+            if (action.isLink) {
+              return (
+                <Link
+                  key={action.key}
+                  to={action.to}
+                  className={`${baseClass} ${variantClass}`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {action.label}
+                </Link>
+              )
+            }
+
+            return (
+              <button
+                key={action.key}
+                onClick={() => onAction(action.key, action.targetId)}
+                disabled={isLoading}
+                className={`${baseClass} ${variantClass}`}
+              >
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Icon className="w-4 h-4" />
+                )}
+                {action.label}
+              </button>
+            )
+          })}
         </div>
       )}
     </div>
@@ -346,13 +480,364 @@ function BillingCyclesPanel({ contractId }) {
 }
 
 // ============================================================================
+// 建立續約草稿 Modal
+// ============================================================================
+
+function CreateRenewalDraftModal({ isOpen, onClose, contract, onSuccess }) {
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState(null)
+
+  // 計算預設日期：原合約結束日 +1 為新開始日，+1年為新結束日
+  const getDefaultDates = () => {
+    if (!contract?.end_date) return { start: '', end: '' }
+    const endDate = new Date(contract.end_date)
+    const newStart = new Date(endDate)
+    newStart.setDate(newStart.getDate() + 1)
+    const newEnd = new Date(newStart)
+    newEnd.setFullYear(newEnd.getFullYear() + 1)
+    newEnd.setDate(newEnd.getDate() - 1)
+    return {
+      start: newStart.toISOString().split('T')[0],
+      end: newEnd.toISOString().split('T')[0]
+    }
+  }
+
+  const defaultDates = getDefaultDates()
+  const [formData, setFormData] = useState({
+    new_start_date: defaultDates.start,
+    new_end_date: defaultDates.end,
+    monthly_rent: contract?.monthly_rent || '',
+    payment_cycle: contract?.payment_cycle || 'monthly',
+    notes: ''
+  })
+
+  useEffect(() => {
+    if (isOpen && contract) {
+      const dates = getDefaultDates()
+      setFormData({
+        new_start_date: dates.start,
+        new_end_date: dates.end,
+        monthly_rent: contract.monthly_rent || '',
+        payment_cycle: contract.payment_cycle || 'monthly',
+        notes: ''
+      })
+      setError(null)
+    }
+  }, [isOpen, contract])
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+    setError(null)
+
+    try {
+      const response = await callTool('renewal_create_draft', {
+        contract_id: contract.id,
+        new_start_date: formData.new_start_date,
+        new_end_date: formData.new_end_date,
+        monthly_rent: parseFloat(formData.monthly_rent) || undefined,
+        payment_cycle: formData.payment_cycle,
+        notes: formData.notes || undefined
+      })
+
+      if (!response.success || !response.result?.success) {
+        throw new Error(response.result?.error || response.error || '建立失敗')
+      }
+
+      onSuccess(response.result)
+      onClose()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">建立續約草稿</h2>
+            <button
+              onClick={onClose}
+              className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+
+          <div className="mb-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+            <p>原合約：{contract?.contract_number}</p>
+            <p>到期日：{contract?.end_date}</p>
+          </div>
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  新合約開始日
+                </label>
+                <input
+                  type="date"
+                  value={formData.new_start_date}
+                  onChange={(e) => setFormData({ ...formData, new_start_date: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  新合約結束日
+                </label>
+                <input
+                  type="date"
+                  value={formData.new_end_date}
+                  onChange={(e) => setFormData({ ...formData, new_end_date: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                月租金
+              </label>
+              <input
+                type="number"
+                value={formData.monthly_rent}
+                onChange={(e) => setFormData({ ...formData, monthly_rent: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="沿用原金額"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                繳費週期
+              </label>
+              <select
+                value={formData.payment_cycle}
+                onChange={(e) => setFormData({ ...formData, payment_cycle: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="monthly">月繳</option>
+                <option value="quarterly">季繳</option>
+                <option value="semi_annual">半年繳</option>
+                <option value="annual">年繳</option>
+                <option value="biennial">兩年繳</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                備註
+              </label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                rows={2}
+                placeholder="選填"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    建立中...
+                  </span>
+                ) : (
+                  '建立草稿'
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// 合約歷史鏈元件
+// ============================================================================
+
+function ContractHistoryChain({ currentContract, prevContractId, nextContract }) {
+  const hasPrev = !!prevContractId
+  const hasNext = !!nextContract
+
+  if (!hasPrev && !hasNext) {
+    return null
+  }
+
+  return (
+    <div className="bg-white rounded-xl border shadow-sm p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <History className="w-4 h-4 text-gray-500" />
+        <h3 className="text-sm font-medium text-gray-700">合約歷史</h3>
+      </div>
+
+      <div className="flex items-center justify-center gap-2">
+        {/* 前一期 */}
+        {hasPrev ? (
+          <Link
+            to={`/contracts/${prevContractId}/workspace`}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            <ChevronLeft className="w-3 h-3" />
+            <span>上一期</span>
+          </Link>
+        ) : (
+          <div className="w-16" />
+        )}
+
+        {/* 當前合約 */}
+        <div className="flex-1 text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 border-2 border-primary-200 rounded-lg">
+            <span className="text-sm font-medium text-primary-700">
+              {currentContract.contract_number}
+            </span>
+            {currentContract.contract_period && (
+              <span className="text-xs px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded">
+                第 {currentContract.contract_period} 期
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            {currentContract.start_date} ~ {currentContract.end_date}
+          </p>
+        </div>
+
+        {/* 下一期 */}
+        {hasNext ? (
+          <Link
+            to={`/contracts/${nextContract.id}/workspace`}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs bg-green-100 hover:bg-green-200 text-green-700 rounded-lg transition-colors"
+          >
+            <span>下一期</span>
+            <ChevronRight className="w-3 h-3" />
+          </Link>
+        ) : (
+          <div className="w-16" />
+        )}
+      </div>
+
+      {/* 狀態提示 */}
+      {hasNext && nextContract.status && (
+        <p className="text-center text-xs text-gray-500 mt-2">
+          下一期狀態：
+          <span className={`ml-1 font-medium ${
+            nextContract.status === 'active' ? 'text-green-600' :
+            nextContract.status === 'pending_sign' ? 'text-yellow-600' :
+            nextContract.status === 'renewal_draft' ? 'text-blue-600' :
+            'text-gray-600'
+          }`}>
+            {nextContract.status}
+          </span>
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
 // 主頁面元件
 // ============================================================================
 
 export default function ContractWorkspace() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const contractId = parseInt(id)
+
+  // Modal 狀態
+  const [showCreateDraftModal, setShowCreateDraftModal] = useState(false)
+  const [actionLoading, setActionLoading] = useState(false)
+
+  // Action 處理
+  const handleAction = async (actionKey, targetId) => {
+    setActionLoading(true)
+    try {
+      let response
+      switch (actionKey) {
+        case 'create_draft':
+          setShowCreateDraftModal(true)
+          setActionLoading(false)
+          return
+
+        case 'send_for_sign':
+          response = await callTool('renewal_send_for_sign', { contract_id: targetId })
+          break
+
+        case 'mark_signed':
+          response = await callTool('renewal_mark_signed', {
+            contract_id: targetId,
+            auto_activate: false
+          })
+          break
+
+        case 'activate':
+          response = await callTool('renewal_activate', { draft_id: targetId })
+          break
+
+        case 'send_reminder':
+          alert('提醒功能開發中')
+          setActionLoading(false)
+          return
+
+        default:
+          console.warn('Unknown action:', actionKey)
+          setActionLoading(false)
+          return
+      }
+
+      if (!response?.success || !response?.result?.success) {
+        throw new Error(response?.result?.error || response?.error || '操作失敗')
+      }
+
+      // 成功後重新載入
+      queryClient.invalidateQueries(['contract-timeline', contractId])
+      refetch()
+    } catch (err) {
+      alert(`錯誤：${err.message}`)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  // 草稿建立成功回呼
+  const handleDraftCreated = (result) => {
+    queryClient.invalidateQueries(['contract-timeline', contractId])
+    refetch()
+    // 可選：跳轉到新草稿
+    if (result.draft_id) {
+      navigate(`/contracts/${result.draft_id}/workspace`)
+    }
+  }
 
   // 呼叫 Timeline API
   const { data, isLoading, error, refetch } = useQuery({
@@ -460,36 +945,26 @@ export default function ContractWorkspace() {
             </div>
           </div>
 
-          {prev_contract_id && (
+          {contract.monthly_rent && (
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-gray-100 rounded-lg">
-                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              <div className="p-2 bg-green-100 rounded-lg">
+                <DollarSign className="w-5 h-5 text-green-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">上一期合約</p>
-                <Link
-                  to={`/contracts/${prev_contract_id}/workspace`}
-                  className="font-medium text-primary-600 hover:underline"
-                >
-                  #{prev_contract_id}
-                </Link>
+                <p className="text-sm text-gray-500">月租金</p>
+                <p className="font-medium">${contract.monthly_rent?.toLocaleString()}</p>
               </div>
             </div>
           )}
 
-          {next_contract && (
+          {contract.contract_period && (
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <ChevronRight className="w-5 h-5 text-green-600" />
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <History className="w-5 h-5 text-purple-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">續約合約</p>
-                <Link
-                  to={`/contracts/${next_contract.id}/workspace`}
-                  className="font-medium text-primary-600 hover:underline"
-                >
-                  #{next_contract.id} ({next_contract.status})
-                </Link>
+                <p className="text-sm text-gray-500">合約期數</p>
+                <p className="font-medium">第 {contract.contract_period} 期</p>
               </div>
             </div>
           )}
@@ -514,9 +989,23 @@ export default function ContractWorkspace() {
 
         {/* Decision Panel + 繳費週期 */}
         <div className="space-y-6">
+          {/* 合約歷史鏈 */}
+          <ContractHistoryChain
+            currentContract={contract}
+            prevContractId={prev_contract_id}
+            nextContract={next_contract}
+          />
+
+          {/* Decision Panel（含動作按鈕） */}
           <div className="bg-white rounded-xl border shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">目前狀態</h2>
-            <DecisionPanel decision={decision} />
+            <DecisionPanel
+              decision={decision}
+              contract={contract}
+              nextContract={next_contract}
+              onAction={handleAction}
+              isLoading={actionLoading}
+            />
           </div>
 
           {/* 繳費週期 */}
@@ -538,7 +1027,7 @@ export default function ContractWorkspace() {
               </Link>
 
               <Link
-                to="/payments"
+                to={`/payments?contract_id=${contractId}`}
                 className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <div className="flex items-center gap-2">
@@ -549,7 +1038,7 @@ export default function ContractWorkspace() {
               </Link>
 
               <Link
-                to="/invoices"
+                to={`/invoices?contract_id=${contractId}`}
                 className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <div className="flex items-center gap-2">
@@ -562,6 +1051,14 @@ export default function ContractWorkspace() {
           </div>
         </div>
       </div>
+
+      {/* 建立續約草稿 Modal */}
+      <CreateRenewalDraftModal
+        isOpen={showCreateDraftModal}
+        onClose={() => setShowCreateDraftModal(false)}
+        contract={contract}
+        onSuccess={handleDraftCreated}
+      />
     </div>
   )
 }
