@@ -79,6 +79,28 @@
 
 ## 4. 狀態流轉圖 (State Machine)
 
+### 為什麼不用判斷式流程圖？
+
+> **如果狀態可能跳躍，就不要畫判斷式流程圖。用 State + Decision + Queue 取代。**
+
+傳統流程圖隱含三個假設，但我們的業務剛好全部相反：
+
+| 假設 | 我們的實務 |
+|------|-----------|
+| 只有一個現在狀態 | 已付但未簽（狀態交錯） |
+| 每一步只能往前走 | 簽了又改方案（回頭） |
+| 決策只發生一次 | 人可以在任何時候介入（手動） |
+
+**本專案使用的替代方案**：
+
+| 替代工具 | 用途 | 範例 |
+|----------|------|------|
+| **狀態轉移圖** | 只畫合法轉移 | `draft → pending_sign → signed → active` |
+| **Decision Table** | 定義「卡在哪、下一步」 | `v_contract_workspace.decision_blocked_by` |
+| **工作隊列** | Dashboard 待辦清單 | 簽署流程隊列、解約流程隊列 |
+
+### 狀態圖怎麼畫
+
 對於有狀態的實體（合約、案件），必須畫出狀態圖：
 
 ```
@@ -253,6 +275,29 @@
 | 發票開立 | 外部 API 成功但本地更新失敗 | 冪等性操作追蹤 | ✅ 已修復 |
 | 免收核准 | 付款和申請狀態不同步 | PostgreSQL Function | ✅ 已修復 |
 | 直接 PATCH status | 繞過業務邏輯 | DB Trigger 保護 | ✅ 已修復 |
+
+---
+
+## 10. 各模組 Decision 模式現況
+
+> 2025-12-27 更新
+
+| 模組 | 狀態機 | Decision | 工作隊列 | 評估 |
+|------|--------|----------|----------|------|
+| **續約流程** | ✅ `active → confirmed → renewal_draft → pending_sign → signed → active` | ✅ `v_contract_workspace` | ✅ Dashboard 續約追蹤 | 已完成 |
+| **簽署流程** | ✅ `draft → pending_sign → signed → active` | ✅ Timeline `signing_status` | ✅ Dashboard 簽署隊列 | 已完成 |
+| **解約流程** | ✅ 7 狀態 + 8 步驟 Checklist | ✅ `v_termination_workspace` | ✅ Dashboard 解約隊列 | 已完成 |
+| **付款流程** | ⚠️ 線性但有分支（免收申請） | ❌ 缺少 | ⚠️ 只有逾期列表 | 觀察中 |
+| **發票流程** | ⚠️ 有冪等性保護 | ❌ 缺少 | ❌ 缺少 | 觀察中 |
+| **會議室預約** | ✅ 簡單但完整 | ❌ 不需要 | ❌ 不需要 | OK |
+
+### 已實作的 Workspace 視圖
+
+| 視圖 | 用途 | Decision 欄位 |
+|------|------|---------------|
+| `v_contract_workspace` | 合約續約 + 簽署流程 | `decision_blocked_by`, `decision_next_action`, `decision_owner` |
+| `v_termination_workspace` | 解約流程 | `decision_blocked_by`, `decision_next_action`, `decision_owner` |
+| `v_pending_sign_contracts` | 簽署流程待辦 | `is_overdue`, `days_pending` |
 
 ---
 
