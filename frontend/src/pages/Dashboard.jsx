@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useBranchRevenue, useTodayTasks, useOverdueDetails, useRenewalReminders, usePaymentsDue, useTodayBookings, useTerminationCases } from '../hooks/useApi'
+import { useBranchRevenue, useTodayTasks, useOverdueDetails, useRenewalReminders, usePaymentsDue, useTodayBookings, useTerminationCases, usePendingSignContracts } from '../hooks/useApi'
 import { useNavigate } from 'react-router-dom'
 import {
   Users,
@@ -20,7 +20,8 @@ import {
   MessageCircle,
   History,
   Power,
-  FileX
+  FileX,
+  PenTool
 } from 'lucide-react'
 import { line } from '../services/api'
 import StatCard from '../components/StatCard'
@@ -70,6 +71,7 @@ export default function Dashboard() {
   const { data: paymentsDue } = usePaymentsDue()
   const { data: todayBookings, isLoading: bookingsLoading } = useTodayBookings()
   const { data: terminationCases } = useTerminationCases()
+  const { data: pendingSignContracts } = usePendingSignContracts()
 
   // 催繳狀態
   const [sendingReminder, setSendingReminder] = useState({})
@@ -313,6 +315,78 @@ export default function Dashboard() {
               <div className="bg-green-100 text-green-700 rounded-lg p-3 text-center">
                 <div className="text-2xl font-bold">{stageCounts.completed}</div>
                 <div className="text-xs">已完成</div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* 簽署流程隊列 */}
+      {pendingSignContracts?.length > 0 && (() => {
+        // 計算各狀態數量
+        const signingCounts = pendingSignContracts.reduce((acc, c) => {
+          if (c.status === 'renewal_draft' && !c.sent_for_sign_at) {
+            acc.need_send = (acc.need_send || 0) + 1
+          } else if (c.status === 'pending_sign' && c.is_overdue) {
+            acc.overdue = (acc.overdue || 0) + 1
+          } else if (c.status === 'pending_sign') {
+            acc.waiting = (acc.waiting || 0) + 1
+          } else if (c.status === 'signed') {
+            acc.need_activate = (acc.need_activate || 0) + 1
+          }
+          return acc
+        }, { need_send: 0, waiting: 0, overdue: 0, need_activate: 0 })
+
+        const totalActions = signingCounts.need_send + signingCounts.overdue + signingCounts.need_activate
+
+        return (
+          <div className="card cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/contracts')}>
+            <div className="card-header">
+              <h3 className="card-title flex items-center gap-2">
+                <PenTool className="w-5 h-5 text-purple-500" />
+                簽署流程待辦
+              </h3>
+              {totalActions > 0 && <Badge variant="danger">{totalActions} 項待處理</Badge>}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {/* 待送簽 */}
+              <div
+                className="bg-blue-100 text-blue-700 rounded-lg p-3 text-center cursor-pointer hover:bg-blue-200 transition-colors"
+                onClick={(e) => { e.stopPropagation(); navigate('/contracts?tab=pending') }}
+              >
+                <div className="text-2xl font-bold">{signingCounts.need_send}</div>
+                <div className="text-xs">待送簽</div>
+              </div>
+              {/* 等待回簽 */}
+              <div
+                className="bg-yellow-100 text-yellow-700 rounded-lg p-3 text-center cursor-pointer hover:bg-yellow-200 transition-colors"
+                onClick={(e) => { e.stopPropagation(); navigate('/contracts?tab=pending') }}
+              >
+                <div className="text-2xl font-bold">{signingCounts.waiting}</div>
+                <div className="text-xs">等待回簽</div>
+              </div>
+              {/* 回簽逾期 */}
+              <div
+                className={`rounded-lg p-3 text-center cursor-pointer transition-colors relative ${
+                  signingCounts.overdue > 0
+                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                    : 'bg-gray-100 text-gray-400'
+                }`}
+                onClick={(e) => { e.stopPropagation(); navigate('/contracts?tab=pending') }}
+              >
+                {signingCounts.overdue > 0 && (
+                  <AlertTriangle className="w-4 h-4 absolute top-2 right-2 opacity-50" />
+                )}
+                <div className="text-2xl font-bold">{signingCounts.overdue}</div>
+                <div className="text-xs">回簽逾期</div>
+              </div>
+              {/* 待啟用 */}
+              <div
+                className="bg-green-100 text-green-700 rounded-lg p-3 text-center cursor-pointer hover:bg-green-200 transition-colors"
+                onClick={(e) => { e.stopPropagation(); navigate('/contracts?tab=pending') }}
+              >
+                <div className="text-2xl font-bold">{signingCounts.need_activate}</div>
+                <div className="text-xs">待啟用</div>
               </div>
             </div>
           </div>
