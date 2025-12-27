@@ -42,7 +42,12 @@ async def update_renewal_status(
     notes: Optional[str] = None
 ) -> dict:
     """
-    更新合約的續約狀態
+    [V1 已棄用] 更新合約的續約狀態
+
+    ⚠️ 此工具已棄用，V3 設計改為：
+    - 意願管理：使用 renewal_set_flag (notified/confirmed)
+    - 收款：由 Payments 系統管理 (SSOT)
+    - 簽約：由 renewal_create_draft + renewal_activate 管理
 
     Args:
         contract_id: 合約 ID
@@ -52,6 +57,9 @@ async def update_renewal_status(
     Returns:
         更新結果
     """
+    # V3 護欄：記錄棄用警告
+    logger.warning(f"[V1 已棄用] update_renewal_status 被呼叫，contract_id={contract_id}，renewal_status={renewal_status}")
+
     if renewal_status not in VALID_RENEWAL_STATUSES:
         return {
             "success": False,
@@ -107,7 +115,10 @@ async def update_invoice_status(
     notes: Optional[str] = None
 ) -> dict:
     """
-    更新合約的發票狀態
+    [V2 過渡期] 更新合約的發票狀態
+
+    ⚠️ V3 設計中，發票狀態應由 Invoices 系統管理 (SSOT)
+    此工具保留於過渡期使用，未來將由發票模組完全接管
 
     Args:
         contract_id: 合約 ID
@@ -117,6 +128,9 @@ async def update_invoice_status(
     Returns:
         更新結果
     """
+    # V3 護欄：記錄使用情況（過渡期）
+    logger.info(f"[V2 過渡期] update_invoice_status 被呼叫，contract_id={contract_id}，invoice_status={invoice_status}")
+
     if invoice_status not in VALID_INVOICE_STATUSES:
         return {
             "success": False,
@@ -208,20 +222,28 @@ async def renewal_set_flag(
     """
     設定或清除續約 Checklist 的 flag（使用時間戳作為事實來源）
 
-    實作 Cascade Logic:
-    - 設定 paid/signed 時自動補上 confirmed
-    - 清除 flag 時不會自動清除其他 flag
+    V3 設計：只允許設定意願管理 flag (notified/confirmed)
+    paid/signed 由 SSOT 系統自動計算，不可手動設定
 
     Args:
         contract_id: 合約 ID
-        flag: flag 名稱 (notified/confirmed/paid/signed)
+        flag: flag 名稱 (notified/confirmed)
         value: True = 設定, False = 清除
         notes: 備註
 
     Returns:
         更新結果，包含更新後的所有 flag 狀態
     """
-    valid_flags = ['notified', 'confirmed', 'paid', 'signed']
+    # V3 設計：只允許 notified 和 confirmed（意願管理）
+    valid_flags = ['notified', 'confirmed']
+    deprecated_flags = ['paid', 'signed']
+
+    if flag in deprecated_flags:
+        return {
+            "success": False,
+            "error": f"V3 設計：{flag} 不可手動設定，由 SSOT 系統自動計算"
+        }
+
     if flag not in valid_flags:
         return {
             "success": False,
@@ -231,9 +253,7 @@ async def renewal_set_flag(
     # 時間戳欄位對應
     flag_to_timestamp = {
         'notified': 'renewal_notified_at',
-        'confirmed': 'renewal_confirmed_at',
-        'paid': 'renewal_paid_at',
-        'signed': 'renewal_signed_at'
+        'confirmed': 'renewal_confirmed_at'
     }
 
     now = datetime.now().isoformat()
@@ -242,24 +262,9 @@ async def renewal_set_flag(
     if value:
         # 設定 flag：寫入時間戳
         update_data[flag_to_timestamp[flag]] = now
-
-        # Cascade Logic: 設定 paid 或 signed 時，自動補上 confirmed
-        if flag in ['paid', 'signed']:
-            # 先取得目前的合約狀態
-            try:
-                result = await postgrest_request(
-                    "GET",
-                    f"contracts?id=eq.{contract_id}&select=renewal_confirmed_at"
-                )
-                if result and not result[0].get('renewal_confirmed_at'):
-                    # 如果尚未確認，自動補上
-                    update_data['renewal_confirmed_at'] = now
-            except Exception as e:
-                logger.warning(f"取得合約狀態失敗，跳過 cascade: {e}")
     else:
         # 清除 flag：設為 null
         update_data[flag_to_timestamp[flag]] = None
-        # 注意：清除時不會自動清除其他 flag
 
     if notes:
         update_data["renewal_notes"] = notes
@@ -273,40 +278,19 @@ async def renewal_set_flag(
             headers={"Prefer": "return=representation"}
         )
 
-        # 取得更新後的完整狀態
+        # 取得更新後的完整狀態（V3：只取意願欄位）
         result = await postgrest_request(
             "GET",
-            f"contracts?id=eq.{contract_id}&select=id,contract_number,renewal_notified_at,renewal_confirmed_at,renewal_paid_at,renewal_signed_at,invoice_status,renewal_status"
+            f"contracts?id=eq.{contract_id}&select=id,contract_number,renewal_notified_at,renewal_confirmed_at"
         )
 
         if result:
             contract = result[0]
-            # 計算 computed flags
-            flags = {
+            # V3 設計：只回傳意願管理 flags
+            intent_flags = {
                 "is_notified": bool(contract.get('renewal_notified_at')),
-                "is_confirmed": bool(contract.get('renewal_confirmed_at')),
-                "is_paid": bool(contract.get('renewal_paid_at')),
-                "is_signed": bool(contract.get('renewal_signed_at')),
-                "is_invoiced": contract.get('invoice_status') and contract.get('invoice_status') != 'pending_tax_id'
+                "is_confirmed": bool(contract.get('renewal_confirmed_at'))
             }
-
-            # 計算 progress 和 stage
-            completed_count = sum(1 for v in flags.values() if v)
-
-            if completed_count == 0:
-                stage = 'pending'
-            elif completed_count == 5:
-                stage = 'completed'
-            else:
-                stage = 'in_progress'
-
-            # 自動更新 renewal_status 欄位
-            if stage != contract.get('renewal_status'):
-                await postgrest_request(
-                    "PATCH",
-                    f"contracts?id=eq.{contract_id}",
-                    data={"renewal_status": stage}
-                )
 
             return {
                 "success": True,
@@ -314,11 +298,9 @@ async def renewal_set_flag(
                 "contract_number": contract.get('contract_number'),
                 "flag_updated": flag,
                 "new_value": value,
-                "flags": flags,
-                "progress": completed_count,
-                "stage": stage,
+                "intent_flags": intent_flags,  # V3: 只回傳意願 flags
                 "updated_at": now,
-                "cascade_triggered": flag in ['paid', 'signed'] and value and 'renewal_confirmed_at' in update_data and update_data.get('renewal_confirmed_at') == now
+                "note": "V3 設計：paid/signed/invoiced 狀態由 SSOT 視圖提供"
             }
 
         return {

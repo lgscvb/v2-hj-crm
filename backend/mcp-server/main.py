@@ -497,7 +497,7 @@ MCP_TOOLS = {
         "handler": create_contract
     },
     "contract_renew": {
-        "description": "續約：將舊合約標記為「已續約」，建立新合約",
+        "description": "[V1 已棄用] 續約：將舊合約標記為「已續約」，建立新合約。請改用 renewal_create_draft + renewal_activate",
         "parameters": {
             "contract_id": {"type": "integer", "description": "舊合約ID", "required": True},
             "new_start_date": {"type": "string", "description": "新合約開始日期 (YYYY-MM-DD)", "required": True},
@@ -582,7 +582,7 @@ MCP_TOOLS = {
 
     # 續約流程管理工具
     "renewal_update_status": {
-        "description": "更新合約的續約狀態",
+        "description": "[V1 已棄用] 更新合約的續約狀態。請改用 renewal_set_flag (意願) 或 renewal_create_draft + renewal_activate (簽約)",
         "parameters": {
             "contract_id": {"type": "integer", "description": "合約ID", "required": True},
             "renewal_status": {"type": "string", "description": "續約狀態 (notified/confirmed/paid/invoiced/signed/completed)", "required": True},
@@ -591,7 +591,7 @@ MCP_TOOLS = {
         "handler": update_renewal_status
     },
     "renewal_update_invoice_status": {
-        "description": "更新合約的發票狀態",
+        "description": "[V2 過渡期] 更新合約的發票狀態。未來將由發票模組 (SSOT) 管理",
         "parameters": {
             "contract_id": {"type": "integer", "description": "合約ID", "required": True},
             "invoice_status": {"type": "string", "description": "發票狀態 (pending_tax_id/issued_personal/issued_business)", "required": True},
@@ -616,10 +616,10 @@ MCP_TOOLS = {
         "handler": batch_update_renewal_status
     },
     "renewal_set_flag": {
-        "description": "設定或清除續約 Checklist 的 flag（使用時間戳作為事實來源）。設定 paid/signed 會自動補上 confirmed（Cascade Logic）",
+        "description": "[V3] 設定或清除續約意願 flag（notified/confirmed）。paid/signed 由 SSOT 系統管理，不可手動設定",
         "parameters": {
             "contract_id": {"type": "integer", "description": "合約ID", "required": True},
-            "flag": {"type": "string", "description": "flag 名稱 (notified/confirmed/paid/signed)", "required": True},
+            "flag": {"type": "string", "description": "意願 flag 名稱 (notified/confirmed)", "required": True},
             "value": {"type": "boolean", "description": "True = 設定, False = 清除", "required": True},
             "notes": {"type": "string", "description": "備註", "optional": True}
         },

@@ -33,7 +33,6 @@ import {
   RefreshCw,
   Bell,
   Receipt,
-  PenTool,
   ChevronDown,
   FileDown,
   RotateCcw,
@@ -106,13 +105,6 @@ function getDisplayStatus(contract) {
   }
 }
 
-// 發票狀態定義
-const INVOICE_STATUSES = {
-  pending_tax_id: { label: '等待統編', color: 'yellow' },
-  issued_personal: { label: '已開二聯', color: 'blue' },
-  issued_business: { label: '已開三聯', color: 'green' }
-}
-
 // ============================================================================
 // Checklist Popover 元件
 // ============================================================================
@@ -140,20 +132,16 @@ function ChecklistPopover({ contract, onUpdate, onSaveNotes, isUpdating, onClose
     setNotesChanged(false)
   }, [contract.renewal_notes])
 
-  const items = [
+  // V3 設計：可手動更新的意願管理項目（只有 notified 和 confirmed）
+  const editableItems = [
     { key: 'notified', label: '已通知', icon: Bell, checked: flags.is_notified, timestamp: contract.renewal_notified_at },
     { key: 'confirmed', label: '已確認', icon: CheckCircle, checked: flags.is_confirmed, timestamp: contract.renewal_confirmed_at },
-    { key: 'paid', label: '已收款', icon: Receipt, checked: flags.is_paid, timestamp: contract.renewal_paid_at },
-    { key: 'signed', label: '已簽約', icon: PenTool, checked: flags.is_signed, timestamp: contract.renewal_signed_at },
   ]
 
-  const invoiceItem = {
-    label: '已開票',
-    icon: FileText,
-    checked: flags.is_invoiced,
-    isInvoice: true,
-    status: contract.invoice_status
-  }
+  // V3 設計：唯讀顯示的財務狀態（SSOT，從 payment 計算）
+  const readonlyItems = [
+    { key: 'paid', label: '已收款', icon: Receipt, checked: flags.is_paid, hint: flags.is_paid ? '（付款管理）' : '→ 付款管理' },
+  ]
 
   const formatTime = (ts) => {
     if (!ts) return null
@@ -180,8 +168,11 @@ function ChecklistPopover({ contract, onUpdate, onSaveNotes, isUpdating, onClose
   return (
     <div ref={popoverRef} className="absolute top-full left-0 mt-2 bg-white border rounded-lg shadow-lg z-50 p-3 min-w-[320px]">
       <h4 className="font-medium text-gray-900 mb-3 pb-2 border-b">續約進度 Checklist</h4>
-      <div className="space-y-2">
-        {items.map(({ key, label, icon: Icon, checked, timestamp }) => (
+
+      {/* 意願管理（可勾選） */}
+      <div className="space-y-2 mb-3">
+        <div className="text-xs text-gray-400 mb-1">意願管理</div>
+        {editableItems.map(({ key, label, icon: Icon, checked, timestamp }) => (
           <div key={key} className="flex items-center justify-between">
             <label className="flex items-center gap-2 cursor-pointer flex-1">
               <input
@@ -204,54 +195,49 @@ function ChecklistPopover({ contract, onUpdate, onSaveNotes, isUpdating, onClose
             )}
           </div>
         ))}
+      </div>
 
-        {/* 發票狀態（獨立處理） */}
-        <div className="pt-2 mt-2 border-t">
-          <div className="flex items-center gap-2 mb-2">
-            <FileText className={`w-4 h-4 ${invoiceItem.checked ? 'text-green-500' : 'text-gray-400'}`} />
-            <span className={`text-sm ${invoiceItem.checked ? 'text-gray-900' : 'text-gray-500'}`}>
-              發票狀態
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-1 ml-6">
-            {Object.entries(INVOICE_STATUSES).map(([key, { label }]) => (
-              <button
-                key={key}
-                onClick={() => onUpdate('invoice', key)}
-                disabled={isUpdating}
-                className={`text-xs px-2 py-1 rounded ${
-                  contract.invoice_status === key
-                    ? 'bg-green-100 text-green-700 font-medium'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
+      {/* 財務狀態（唯讀顯示，SSOT） */}
+      <div className="pt-2 mt-2 border-t space-y-2">
+        <div className="text-xs text-gray-400 mb-1">財務狀態（唯讀）</div>
+        {readonlyItems.map(({ key, label, icon: Icon, checked, hint }) => (
+          <div key={key} className="flex items-center justify-between opacity-70">
+            <div className="flex items-center gap-2 flex-1">
+              <div className={`w-4 h-4 rounded border ${checked ? 'bg-green-500 border-green-500' : 'border-gray-300'} flex items-center justify-center`}>
+                {checked && <CheckCircle className="w-3 h-3 text-white" />}
+              </div>
+              <Icon className={`w-4 h-4 ${checked ? 'text-green-500' : 'text-gray-400'}`} />
+              <span className={`text-sm ${checked ? 'text-gray-900' : 'text-gray-500'}`}>
                 {label}
-              </button>
-            ))}
+              </span>
+              {hint && (
+                <span className="text-xs text-gray-400 ml-1">{hint}</span>
+              )}
+            </div>
           </div>
-        </div>
+        ))}
+      </div>
 
-        {/* 備註欄位 */}
-        <div className="pt-2 mt-2 border-t">
-          <label className="block text-sm text-gray-600 mb-1">
-            備註（發票日期、統編等）
-          </label>
-          <textarea
-            value={notes}
-            onChange={handleNotesChange}
-            placeholder="例：12/20 開立發票，統編 12345678"
-            className="w-full text-sm border rounded p-2 h-16 resize-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
-          />
-          {notesChanged && (
-            <button
-              onClick={handleSaveNotes}
-              disabled={isUpdating}
-              className="mt-1 w-full text-xs px-2 py-1.5 bg-primary-500 text-white rounded hover:bg-primary-600 disabled:opacity-50"
-            >
-              儲存備註
-            </button>
-          )}
-        </div>
+      {/* 備註欄位 */}
+      <div className="pt-2 mt-2 border-t">
+        <label className="block text-sm text-gray-600 mb-1">
+          備註
+        </label>
+        <textarea
+          value={notes}
+          onChange={handleNotesChange}
+          placeholder="續約相關備註..."
+          className="w-full text-sm border rounded p-2 h-16 resize-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+        />
+        {notesChanged && (
+          <button
+            onClick={handleSaveNotes}
+            disabled={isUpdating}
+            className="mt-1 w-full text-xs px-2 py-1.5 bg-primary-500 text-white rounded hover:bg-primary-600 disabled:opacity-50"
+          >
+            儲存備註
+          </button>
+        )}
       </div>
 
       {isUpdating && (

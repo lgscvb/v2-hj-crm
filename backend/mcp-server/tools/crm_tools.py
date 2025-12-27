@@ -901,7 +901,11 @@ async def contract_renew(
     notes: str = None
 ) -> Dict[str, Any]:
     """
-    續約：將舊合約標記為「已續約」，建立新合約
+    [V1 已棄用] 續約：將舊合約標記為「已續約」，建立新合約
+
+    ⚠️ 此工具已棄用，請改用 V3 兩階段續約流程：
+    1. renewal_create_draft - 建立續約草稿
+    2. renewal_activate - 啟用續約合約
 
     Args:
         contract_id: 舊合約ID
@@ -914,6 +918,9 @@ async def contract_renew(
     Returns:
         續約結果，包含新舊合約資訊
     """
+    # V3 護欄：記錄棄用警告
+    logger.warning(f"[V1 已棄用] contract_renew 被呼叫，contract_id={contract_id}，建議改用 renewal_create_draft + renewal_activate")
+
     try:
         # 1. 取得舊合約
         contracts = await postgrest_get("contracts", {"id": f"eq.{contract_id}"})
