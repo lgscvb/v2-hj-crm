@@ -55,15 +55,16 @@ BEGIN
         -- 新增包含新狀態的 constraint
         ALTER TABLE contracts ADD CONSTRAINT contracts_status_check
         CHECK (status IN (
-            'draft',           -- 草稿（新合約）
-            'renewal_draft',   -- 續約草稿
-            'pending_sign',    -- 已送簽，等待回簽
-            'signed',          -- 已回簽，待啟用
-            'active',          -- 已啟用
-            'expired',         -- 已過期
-            'renewed',         -- 已續約（舊合約）
-            'terminated',      -- 已終止
-            'cancelled'        -- 已取消
+            'draft',              -- 草稿（新合約）
+            'renewal_draft',      -- 續約草稿
+            'pending_sign',       -- 已送簽，等待回簽
+            'signed',             -- 已回簽，待啟用
+            'active',             -- 已啟用
+            'expired',            -- 已過期
+            'renewed',            -- 已續約（舊合約）
+            'pending_termination', -- 待終止
+            'terminated',         -- 已終止
+            'cancelled'           -- 已取消
         ));
 
         RAISE NOTICE '已更新 status check constraint';
