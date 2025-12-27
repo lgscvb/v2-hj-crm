@@ -460,6 +460,174 @@ async def renewal_cancel_draft(
 
 
 # ============================================================================
+# 簽署流程管理
+# ============================================================================
+
+async def renewal_send_for_sign(
+    contract_id: int,
+    sent_by: str = None
+) -> Dict[str, Any]:
+    """
+    送出合約簽署
+
+    將合約狀態從 renewal_draft 改為 pending_sign，
+    並記錄 sent_for_sign_at 時間。
+
+    Args:
+        contract_id: 合約 ID（必須是 renewal_draft 狀態）
+        sent_by: 操作者
+
+    Returns:
+        更新結果
+    """
+    try:
+        # 1. 取得合約
+        contracts = await postgrest_get("contracts", {
+            "id": f"eq.{contract_id}",
+            "select": "id,contract_number,contract_period,status,sent_for_sign_at"
+        })
+
+        if not contracts:
+            return {"success": False, "error": "找不到合約", "code": "NOT_FOUND"}
+
+        contract = contracts[0]
+
+        # 2. 驗證狀態
+        if contract["status"] not in ["renewal_draft", "draft"]:
+            return {
+                "success": False,
+                "error": f"只能送簽草稿狀態的合約，目前狀態為 {contract['status']}",
+                "code": "INVALID_STATUS"
+            }
+
+        if contract.get("sent_for_sign_at"):
+            return {
+                "success": False,
+                "error": "此合約已送簽",
+                "code": "ALREADY_SENT",
+                "sent_at": contract["sent_for_sign_at"]
+            }
+
+        # 3. 更新狀態
+        now = datetime.now().isoformat()
+        await postgrest_patch("contracts", {"id": f"eq.{contract_id}"}, {
+            "status": "pending_sign",
+            "sent_for_sign_at": now,
+            "updated_at": now
+        })
+
+        return {
+            "success": True,
+            "contract_id": contract_id,
+            "contract_number": contract["contract_number"],
+            "contract_period": contract.get("contract_period"),
+            "new_status": "pending_sign",
+            "sent_for_sign_at": now,
+            "sent_by": sent_by,
+            "message": "合約已送出簽署，等待客戶回簽"
+        }
+
+    except Exception as e:
+        logger.error(f"renewal_send_for_sign error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+async def renewal_mark_signed(
+    contract_id: int,
+    signed_at: str = None,
+    signed_by: str = None,
+    auto_activate: bool = False
+) -> Dict[str, Any]:
+    """
+    標記合約已簽回
+
+    將合約狀態從 pending_sign 改為 signed，
+    並記錄 signed_at 時間。
+
+    如果 auto_activate=True，會自動啟用合約（signed → active）。
+
+    Args:
+        contract_id: 合約 ID（必須是 pending_sign 狀態）
+        signed_at: 簽署時間（不填則用當前時間）
+        signed_by: 操作者
+        auto_activate: 是否自動啟用
+
+    Returns:
+        更新結果
+    """
+    try:
+        # 1. 取得合約
+        contracts = await postgrest_get("contracts", {
+            "id": f"eq.{contract_id}",
+            "select": "id,contract_number,contract_period,status,signed_at,renewed_from_id"
+        })
+
+        if not contracts:
+            return {"success": False, "error": "找不到合約", "code": "NOT_FOUND"}
+
+        contract = contracts[0]
+
+        # 2. 驗證狀態
+        valid_statuses = ["pending_sign", "renewal_draft", "draft"]
+        if contract["status"] not in valid_statuses:
+            return {
+                "success": False,
+                "error": f"只能標記待簽狀態的合約，目前狀態為 {contract['status']}",
+                "code": "INVALID_STATUS"
+            }
+
+        if contract.get("signed_at"):
+            return {
+                "success": False,
+                "error": "此合約已簽署",
+                "code": "ALREADY_SIGNED",
+                "signed_at": contract["signed_at"]
+            }
+
+        # 3. 決定目標狀態
+        now = datetime.now().isoformat()
+        sign_time = signed_at or now
+        target_status = "active" if auto_activate else "signed"
+
+        update_data = {
+            "status": target_status,
+            "signed_at": sign_time,
+            "updated_at": now
+        }
+
+        # 如果沒送簽就直接簽回，補上 sent_for_sign_at
+        if not contract.get("sent_for_sign_at"):
+            update_data["sent_for_sign_at"] = sign_time
+
+        # 4. 更新合約
+        await postgrest_patch("contracts", {"id": f"eq.{contract_id}"}, update_data)
+
+        # 5. 如果自動啟用，更新舊合約狀態
+        if auto_activate and contract.get("renewed_from_id"):
+            await postgrest_patch(
+                "contracts",
+                {"id": f"eq.{contract['renewed_from_id']}"},
+                {"status": "renewed", "updated_at": now}
+            )
+
+        return {
+            "success": True,
+            "contract_id": contract_id,
+            "contract_number": contract["contract_number"],
+            "contract_period": contract.get("contract_period"),
+            "new_status": target_status,
+            "signed_at": sign_time,
+            "signed_by": signed_by,
+            "auto_activated": auto_activate,
+            "message": f"合約已標記簽署完成，狀態為 {target_status}"
+        }
+
+    except Exception as e:
+        logger.error(f"renewal_mark_signed error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# ============================================================================
 # MCP 工具定義
 # ============================================================================
 
@@ -595,6 +763,50 @@ RENEWAL_V3_TOOLS = [
                 }
             },
             "required": ["draft_id"]
+        }
+    },
+    {
+        "name": "renewal_send_for_sign",
+        "description": "送出合約簽署 - 將草稿狀態改為待簽，開始追蹤回簽時間",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "contract_id": {
+                    "type": "integer",
+                    "description": "合約 ID（必須是草稿狀態）"
+                },
+                "sent_by": {
+                    "type": "string",
+                    "description": "送簽人"
+                }
+            },
+            "required": ["contract_id"]
+        }
+    },
+    {
+        "name": "renewal_mark_signed",
+        "description": "標記合約已簽回 - 可選擇自動啟用",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "contract_id": {
+                    "type": "integer",
+                    "description": "合約 ID（必須是待簽狀態）"
+                },
+                "signed_at": {
+                    "type": "string",
+                    "description": "簽署時間 (YYYY-MM-DD HH:MM:SS)，不填則用當前時間"
+                },
+                "signed_by": {
+                    "type": "string",
+                    "description": "簽署確認人"
+                },
+                "auto_activate": {
+                    "type": "boolean",
+                    "description": "是否自動啟用合約（預設 false）"
+                }
+            },
+            "required": ["contract_id"]
         }
     }
 ]

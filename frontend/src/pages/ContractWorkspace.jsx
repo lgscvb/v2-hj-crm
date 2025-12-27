@@ -75,9 +75,17 @@ function TimelineNode({ item, isLast }) {
           {item.key === 'signing' && item.next_contract_id && (
             <>
               <p>續約合約 ID：{item.next_contract_id}</p>
-              {item.days_pending && <p className="text-yellow-600">已等待 {item.days_pending} 天</p>}
-              {item.next_signed_at && <p>簽署時間：{new Date(item.next_signed_at).toLocaleString('zh-TW')}</p>}
+              {item.sent_for_sign_at && <p>送簽時間：{new Date(item.sent_for_sign_at).toLocaleString('zh-TW')}</p>}
+              {item.days_pending > 0 && !item.next_signed_at && (
+                <p className={item.days_pending > 14 ? "text-red-600 font-medium" : "text-yellow-600"}>
+                  已等待 {item.days_pending} 天{item.days_pending > 14 && '（逾期）'}
+                </p>
+              )}
+              {item.next_signed_at && <p className="text-green-600">簽署時間：{new Date(item.next_signed_at).toLocaleString('zh-TW')}</p>}
             </>
+          )}
+          {item.key === 'signing' && !item.next_contract_id && item.status === 'not_created' && (
+            <p className="text-gray-400">尚未建立續約合約</p>
           )}
           {item.key === 'payment' && (
             <>
@@ -118,9 +126,13 @@ function DecisionPanel({ decision }) {
 
   const blockedLabels = {
     need_create_renewal: '尚未建立續約合約',
+    need_send_for_sign: '合約草稿待送簽',
+    waiting_for_sign: '等待客戶回簽',
     signing_overdue: '回簽逾期（超過 14 天）',
+    need_activate: '已簽回，待啟用',
     payment_pending: '款項未入帳',
-    invoice_pending: '發票未開立'
+    invoice_pending: '發票未開立',
+    completed: '流程完成'
   }
 
   const ownerColors = {

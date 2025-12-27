@@ -268,7 +268,9 @@ from tools.renewal_tools_v3 import (
     renewal_create_draft,
     renewal_update_draft,
     renewal_activate,
-    renewal_cancel_draft
+    renewal_cancel_draft,
+    renewal_send_for_sign,
+    renewal_mark_signed
 )
 
 from tools.settings_tools import (
