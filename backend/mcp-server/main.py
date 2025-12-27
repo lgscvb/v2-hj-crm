@@ -1080,6 +1080,24 @@ MCP_TOOLS = {
         },
         "handler": renewal_cancel_draft
     },
+    "renewal_send_for_sign": {
+        "description": "送出合約簽署 - 將草稿狀態改為待簽，開始追蹤回簽時間",
+        "parameters": {
+            "contract_id": {"type": "integer", "description": "合約 ID（必須是草稿狀態）", "required": True},
+            "sent_by": {"type": "string", "description": "送簽人", "optional": True}
+        },
+        "handler": renewal_send_for_sign
+    },
+    "renewal_mark_signed": {
+        "description": "標記合約已簽回 - 可選擇自動啟用",
+        "parameters": {
+            "contract_id": {"type": "integer", "description": "合約 ID（必須是待簽狀態）", "required": True},
+            "signed_at": {"type": "string", "description": "簽署時間 (YYYY-MM-DD HH:MM:SS)，不填則用當前時間", "optional": True},
+            "signed_by": {"type": "string", "description": "簽署確認人", "optional": True},
+            "auto_activate": {"type": "boolean", "description": "是否自動啟用合約", "default": False}
+        },
+        "handler": renewal_mark_signed
+    },
 
     # ==========================================================================
     # DDD Domain Tools - Termination（解約領域）
