@@ -547,113 +547,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* 通知記錄 */}
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title flex items-center gap-2">
-              <History className="w-5 h-5 text-blue-500" />
-              通知記錄
-            </h3>
-          </div>
-          <div className="space-y-2 max-h-80 overflow-y-auto">
-            {notificationHistory.length === 0 ? (
-              <div className="py-8 text-center text-gray-500">
-                無通知記錄
-              </div>
-            ) : (
-              notificationHistory.map((record) => (
-                <div
-                  key={record.id}
-                  className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"
-                >
-                  <div className="flex-shrink-0">
-                    {record.status === 'success' ? (
-                      <CheckCircle className="w-5 h-5 text-green-500" />
-                    ) : record.status === 'error' ? (
-                      <AlertTriangle className="w-5 h-5 text-red-500" />
-                    ) : (
-                      <MessageCircle className="w-5 h-5 text-blue-500" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">
-                      {record.customer}
-                    </p>
-                    <p className="text-xs text-gray-600">
-                      {record.message}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {record.timestamp}
-                    </p>
-                  </div>
-                  <Badge variant={record.status === 'success' ? 'success' : 'danger'}>
-                    {record.type === 'payment_reminder' ? '催繳' : '續約'}
-                  </Badge>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 下方區塊 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 今日待辦 */}
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-primary-500" />
-              今日待辦
-            </h3>
-            <Badge variant="info">{todayTasks?.length || 0} 項</Badge>
-          </div>
-          <div className="space-y-3 max-h-80 overflow-y-auto">
-            {tasksLoading ? (
-              <div className="py-8 text-center text-gray-500">載入中...</div>
-            ) : todayTasks?.length === 0 ? (
-              <div className="py-8 text-center text-gray-500">
-                🎉 今日沒有待辦事項
-              </div>
-            ) : (
-              todayTasks?.slice(0, 8).map((task, index) => (
-                <div
-                  key={`task-${index}`}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                  onClick={() => {
-                    if (task.task_type === 'payment_due') navigate('/payments')
-                    else if (task.task_type === 'contract_expiring') navigate('/renewals')
-                    else if (task.task_type === 'commission_due') navigate('/commissions')
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-lg">
-                      {priorityIcon[task.priority] || priorityIcon[task.task_type] || '📌'}
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {task.task_description}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {task.company_name && `${task.company_name} · `}{task.branch_name}
-                      </p>
-                    </div>
-                  </div>
-                  {task.amount && (
-                    <div className="text-right">
-                      <span className="text-sm font-semibold text-gray-700">
-                        ${task.amount.toLocaleString()}
-                      </span>
-                      {task.amountLabel && (
-                        <p className="text-xs text-gray-400">{task.amountLabel}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
         {/* 逾期款項提醒 */}
         <div className="card">
           <div className="card-header">
@@ -729,6 +622,113 @@ export default function Dashboard() {
                   </div>
                 )
               })
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 下方區塊 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 今日待辦 */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-primary-500" />
+              今日待辦
+            </h3>
+            <Badge variant="info">{todayTasks?.length || 0} 項</Badge>
+          </div>
+          <div className="space-y-3 max-h-80 overflow-y-auto">
+            {tasksLoading ? (
+              <div className="py-8 text-center text-gray-500">載入中...</div>
+            ) : todayTasks?.length === 0 ? (
+              <div className="py-8 text-center text-gray-500">
+                🎉 今日沒有待辦事項
+              </div>
+            ) : (
+              todayTasks?.slice(0, 8).map((task, index) => (
+                <div
+                  key={`task-${index}`}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                  onClick={() => {
+                    if (task.task_type === 'payment_due') navigate('/payments')
+                    else if (task.task_type === 'contract_expiring') navigate('/renewals')
+                    else if (task.task_type === 'commission_due') navigate('/commissions')
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg">
+                      {priorityIcon[task.priority] || priorityIcon[task.task_type] || '📌'}
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">
+                        {task.task_description}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {task.company_name && `${task.company_name} · `}{task.branch_name}
+                      </p>
+                    </div>
+                  </div>
+                  {task.amount && (
+                    <div className="text-right">
+                      <span className="text-sm font-semibold text-gray-700">
+                        ${task.amount.toLocaleString()}
+                      </span>
+                      {task.amountLabel && (
+                        <p className="text-xs text-gray-400">{task.amountLabel}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* 通知記錄 */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title flex items-center gap-2">
+              <History className="w-5 h-5 text-blue-500" />
+              通知記錄
+            </h3>
+          </div>
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {notificationHistory.length === 0 ? (
+              <div className="py-8 text-center text-gray-500">
+                無通知記錄
+              </div>
+            ) : (
+              notificationHistory.map((record) => (
+                <div
+                  key={record.id}
+                  className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"
+                >
+                  <div className="flex-shrink-0">
+                    {record.status === 'success' ? (
+                      <CheckCircle className="w-5 h-5 text-green-500" />
+                    ) : record.status === 'error' ? (
+                      <AlertTriangle className="w-5 h-5 text-red-500" />
+                    ) : (
+                      <MessageCircle className="w-5 h-5 text-blue-500" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900">
+                      {record.customer}
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      {record.message}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {record.timestamp}
+                    </p>
+                  </div>
+                  <Badge variant={record.status === 'success' ? 'success' : 'danger'}>
+                    {record.type === 'payment_reminder' ? '催繳' : '續約'}
+                  </Badge>
+                </div>
+              ))
             )}
           </div>
         </div>
