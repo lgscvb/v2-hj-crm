@@ -122,22 +122,46 @@ export default function Contracts() {
   // 客戶列表（保留供其他功能使用）
   // const { data: customers } = useCustomers({ limit: 500 })
 
-  // 續約 mutation
+  // 續約 mutation（V3 兩階段：建立草稿 + 啟用）
   const renewContract = useMutation({
-    mutationFn: (data) => callTool('contract_renew', data),
-    onSuccess: (response) => {
-      const data = response?.result || response
-      if (data.success) {
-        queryClient.invalidateQueries({ queryKey: ['contracts'] })
-        addNotification({
-          type: 'success',
-          message: `續約成功！新合約編號：${data.new_contract?.contract_number || ''}`
-        })
-        setShowRenewModal(false)
-        resetRenewForm()
-      } else {
-        addNotification({ type: 'error', message: data.message || '續約失敗' })
+    mutationFn: async (data) => {
+      // 第一步：建立續約草稿
+      const draftResponse = await callTool('renewal_create_draft', {
+        contract_id: data.contract_id,
+        new_start_date: data.new_start_date,
+        new_end_date: data.new_end_date,
+        monthly_rent: data.new_monthly_rent,
+        notes: data.notes
+      })
+      const draftResult = draftResponse?.result || draftResponse
+      if (!draftResult.success) {
+        throw new Error(draftResult.error || draftResult.message || '建立續約草稿失敗')
       }
+
+      // 第二步：立即啟用草稿
+      const activateResponse = await callTool('renewal_activate', {
+        draft_id: draftResult.draft_id
+      })
+      const activateResult = activateResponse?.result || activateResponse
+      if (!activateResult.success) {
+        throw new Error(activateResult.error || activateResult.message || '啟用續約合約失敗')
+      }
+
+      return {
+        success: true,
+        new_contract: draftResult.draft,
+        old_contract: draftResult.old_contract
+      }
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['contracts'] })
+      queryClient.invalidateQueries({ queryKey: ['pending-sign-contracts'] })
+      addNotification({
+        type: 'success',
+        message: `續約成功！新合約編號：${data.new_contract?.contract_number || ''}`
+      })
+      setShowRenewModal(false)
+      resetRenewForm()
     },
     onError: (error) => {
       addNotification({ type: 'error', message: `續約失敗: ${error.message}` })
