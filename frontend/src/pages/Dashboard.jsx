@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useBranchRevenue, useTodayTasks, useOverdueDetails, useRenewalReminders, usePaymentsDue, useTodayBookings, useTerminationCases, usePendingSignContracts } from '../hooks/useApi'
+import { useBranchRevenue, useTodayTasks, useOverdueDetails, useRenewalReminders, usePaymentsDue, useTodayBookings, useTerminationCases, usePendingSignContracts, useTerminationWorkspace } from '../hooks/useApi'
 import { useNavigate } from 'react-router-dom'
 import {
   Users,
@@ -72,6 +72,7 @@ export default function Dashboard() {
   const { data: todayBookings, isLoading: bookingsLoading } = useTodayBookings()
   const { data: terminationCases } = useTerminationCases()
   const { data: pendingSignContracts } = usePendingSignContracts()
+  const { data: terminationWorkspace } = useTerminationWorkspace()
 
   // 催繳狀態
   const [sendingReminder, setSendingReminder] = useState({})
@@ -393,52 +394,107 @@ export default function Dashboard() {
         )
       })()}
 
-      {/* 解約管理狀態 */}
-      {terminationCases?.length > 0 && (() => {
-        // 計算各狀態數量
-        const statusCounts = terminationCases.reduce((acc, c) => {
-          acc[c.status] = (acc[c.status] || 0) + 1
+      {/* 解約管理狀態（Decision 模式） */}
+      {(terminationWorkspace?.length > 0 || terminationCases?.length > 0) && (() => {
+        // 使用 workspace 數據（含 Decision），fallback 到舊數據
+        const cases = terminationWorkspace?.length > 0 ? terminationWorkspace : terminationCases || []
+
+        // 按卡點分類
+        const blockedCounts = cases.reduce((acc, c) => {
+          const blocked = c.decision_blocked_by || c.status
+          // 搬遷相關
+          if (['need_move_out', 'need_return_keys', 'need_inspect_room'].includes(blocked)) {
+            acc.moving = (acc.moving || 0) + 1
+          }
+          // 公文相關
+          else if (['need_submit_doc', 'waiting_doc_approval'].includes(blocked)) {
+            acc.doc_pending = (acc.doc_pending || 0) + 1
+          }
+          // 公文逾期
+          else if (blocked === 'doc_overdue' || c.is_doc_overdue) {
+            acc.doc_overdue = (acc.doc_overdue || 0) + 1
+          }
+          // 結算相關
+          else if (['need_calculate_settlement', 'settlement_overdue'].includes(blocked)) {
+            acc.settlement = (acc.settlement || 0) + 1
+          }
+          // 退款相關
+          else if (['need_process_refund', 'refund_overdue'].includes(blocked)) {
+            acc.refund = (acc.refund || 0) + 1
+          }
+          // 其他（確認通知等）
+          else {
+            acc.other = (acc.other || 0) + 1
+          }
           return acc
-        }, { notice_received: 0, moving_out: 0, pending_doc: 0, pending_settlement: 0, pending_authority: 0 })
+        }, { moving: 0, doc_pending: 0, doc_overdue: 0, settlement: 0, refund: 0, other: 0 })
+
+        // 計算逾期數量
+        const overdueCount = (blockedCounts.doc_overdue || 0) +
+          cases.filter(c => c.is_settlement_overdue).length +
+          cases.filter(c => c.is_refund_overdue).length
 
         return (
           <div className="card cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/terminations')}>
             <div className="card-header">
               <h3 className="card-title flex items-center gap-2">
                 <FileX className="w-5 h-5 text-red-500" />
-                解約管理
+                解約流程待辦
               </h3>
-              <Badge variant="danger">{terminationCases.length} 件</Badge>
+              <div className="flex gap-2">
+                {overdueCount > 0 && <Badge variant="danger">{overdueCount} 項逾期</Badge>}
+                <Badge variant="secondary">{cases.length} 件</Badge>
+              </div>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              {/* 已通知 */}
-              <div className="bg-yellow-100 text-yellow-700 rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold">{statusCounts.notice_received}</div>
-                <div className="text-xs">已收通知</div>
-              </div>
               {/* 搬遷中 */}
-              <div className="bg-orange-100 text-orange-700 rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold">{statusCounts.moving_out}</div>
+              <div
+                className="bg-orange-100 text-orange-700 rounded-lg p-3 text-center cursor-pointer hover:bg-orange-200 transition-colors"
+                onClick={(e) => { e.stopPropagation(); navigate('/terminations') }}
+              >
+                <div className="text-2xl font-bold">{blockedCounts.moving + blockedCounts.other}</div>
                 <div className="text-xs">搬遷中</div>
               </div>
               {/* 等待公文 */}
-              <div className="bg-blue-100 text-blue-700 rounded-lg p-3 text-center relative">
+              <div
+                className="bg-blue-100 text-blue-700 rounded-lg p-3 text-center cursor-pointer hover:bg-blue-200 transition-colors relative"
+                onClick={(e) => { e.stopPropagation(); navigate('/terminations') }}
+              >
                 <Clock className="w-4 h-4 absolute top-2 right-2 opacity-50" />
-                <div className="text-2xl font-bold">{statusCounts.pending_doc}</div>
+                <div className="text-2xl font-bold">{blockedCounts.doc_pending}</div>
                 <div className="text-xs">等待公文</div>
               </div>
-              {/* 押金結算 */}
-              <div className="bg-purple-100 text-purple-700 rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold">{statusCounts.pending_settlement}</div>
-                <div className="text-xs">押金結算</div>
+              {/* 公文逾期 */}
+              <div
+                className={`rounded-lg p-3 text-center cursor-pointer transition-colors relative ${
+                  blockedCounts.doc_overdue > 0
+                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                    : 'bg-gray-100 text-gray-400'
+                }`}
+                onClick={(e) => { e.stopPropagation(); navigate('/terminations') }}
+              >
+                {blockedCounts.doc_overdue > 0 && (
+                  <AlertTriangle className="w-4 h-4 absolute top-2 right-2 opacity-50" />
+                )}
+                <div className="text-2xl font-bold">{blockedCounts.doc_overdue}</div>
+                <div className="text-xs">公文逾期</div>
               </div>
-              {/* 呆帳通報 */}
-              {statusCounts.pending_authority > 0 && (
-                <div className="bg-red-100 text-red-700 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold">{statusCounts.pending_authority}</div>
-                  <div className="text-xs">呆帳通報</div>
-                </div>
-              )}
+              {/* 押金結算 */}
+              <div
+                className="bg-purple-100 text-purple-700 rounded-lg p-3 text-center cursor-pointer hover:bg-purple-200 transition-colors"
+                onClick={(e) => { e.stopPropagation(); navigate('/terminations') }}
+              >
+                <div className="text-2xl font-bold">{blockedCounts.settlement}</div>
+                <div className="text-xs">待結算</div>
+              </div>
+              {/* 待退款 */}
+              <div
+                className="bg-green-100 text-green-700 rounded-lg p-3 text-center cursor-pointer hover:bg-green-200 transition-colors"
+                onClick={(e) => { e.stopPropagation(); navigate('/terminations') }}
+              >
+                <div className="text-2xl font-bold">{blockedCounts.refund}</div>
+                <div className="text-xs">待退款</div>
+              </div>
             </div>
           </div>
         )

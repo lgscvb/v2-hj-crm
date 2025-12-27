@@ -1016,3 +1016,35 @@ export function useTerminationCases(params = {}) {
     }
   })
 }
+
+// 解約流程 Workspace（含 Decision 卡點判斷）
+export function useTerminationWorkspace(params = {}) {
+  const selectedBranch = useStore((state) => state.selectedBranch)
+
+  return useQuery({
+    queryKey: ['termination-workspace', params, selectedBranch],
+    queryFn: async () => {
+      const queryParams = {
+        order: 'created_at.desc',
+        ...params
+      }
+      if (selectedBranch) {
+        queryParams.branch_id = `eq.${selectedBranch}`
+      }
+      const data = await db.query('v_termination_workspace', queryParams)
+      return Array.isArray(data) ? data : []
+    }
+  })
+}
+
+// 解約流程統計（Dashboard 用）
+export function useTerminationStats() {
+  return useQuery({
+    queryKey: ['termination-stats'],
+    queryFn: async () => {
+      const data = await db.rpc('get_termination_stats')
+      return data
+    },
+    staleTime: 30000 // 30 秒內不重新 fetch
+  })
+}
