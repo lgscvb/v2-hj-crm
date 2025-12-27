@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { callTool } from '../services/api'
+import { useContractBillingCycles, useContractBillingSummary } from '../hooks/useApi'
 import Badge from '../components/Badge'
 import {
   ArrowLeft,
@@ -14,6 +15,8 @@ import {
   AlertTriangle,
   ExternalLink,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Building2,
   Calendar,
   User,
@@ -21,7 +24,9 @@ import {
   Mail,
   Loader2,
   XCircle,
-  Circle
+  Circle,
+  CreditCard,
+  DollarSign
 } from 'lucide-react'
 
 // ============================================================================
@@ -163,6 +168,177 @@ function DecisionPanel({ decision }) {
           <span className={`text-xs px-2 py-0.5 rounded ${ownerColors[decision.owner] || 'bg-gray-100 text-gray-700'}`}>
             {decision.owner}
           </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
+// 繳費週期元件
+// ============================================================================
+
+function BillingCyclesPanel({ contractId }) {
+  const [expanded, setExpanded] = useState(false)
+  const { data: summary, isLoading: summaryLoading } = useContractBillingSummary(contractId)
+  const { data: cycles, isLoading: cyclesLoading } = useContractBillingCycles(contractId, 2, 3)
+
+  if (summaryLoading) {
+    return (
+      <div className="bg-white rounded-xl border shadow-sm p-6">
+        <div className="flex items-center justify-center h-24">
+          <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+        </div>
+      </div>
+    )
+  }
+
+  // 如果不計費，不顯示
+  if (!summary?.is_billable) {
+    return null
+  }
+
+  const hasIssues = summary.overdue_periods > 0 || summary.not_created_periods > 0
+
+  const getStatusIcon = (status, isOverdue) => {
+    if (isOverdue) return <AlertTriangle className="w-4 h-4 text-red-500" />
+    if (status === 'paid' || status === 'waived') return <CheckCircle className="w-4 h-4 text-green-500" />
+    if (status === 'pending') return <Clock className="w-4 h-4 text-yellow-500" />
+    return <Circle className="w-4 h-4 text-gray-300" />
+  }
+
+  const getStatusText = (status, isOverdue) => {
+    if (isOverdue) return '逾期'
+    if (status === 'paid') return '已付'
+    if (status === 'waived') return '免收'
+    if (status === 'pending') return '待繳'
+    return '未建立'
+  }
+
+  const getStatusColor = (status, isOverdue) => {
+    if (isOverdue) return 'text-red-600 bg-red-50'
+    if (status === 'paid' || status === 'waived') return 'text-green-600 bg-green-50'
+    if (status === 'pending') return 'text-yellow-600 bg-yellow-50'
+    return 'text-gray-400 bg-gray-50'
+  }
+
+  return (
+    <div className="bg-white rounded-xl border shadow-sm p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <CreditCard className="w-5 h-5 text-gray-500" />
+          繳費週期
+        </h2>
+        <div className="flex items-center gap-2">
+          {hasIssues && (
+            <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-700">
+              {summary.overdue_periods > 0 && `${summary.overdue_periods} 逾期`}
+              {summary.overdue_periods > 0 && summary.not_created_periods > 0 && ' / '}
+              {summary.not_created_periods > 0 && `${summary.not_created_periods} 未建立`}
+            </span>
+          )}
+          <span className="text-sm font-medium text-gray-700">
+            {summary.paid_periods}/{summary.total_periods} 期已繳
+          </span>
+        </div>
+      </div>
+
+      {/* 摘要資訊 */}
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="bg-gray-50 rounded-lg p-3">
+          <p className="text-xs text-gray-500">下次繳費</p>
+          <p className="font-medium text-gray-900">
+            {summary.next_due_date
+              ? new Date(summary.next_due_date).toLocaleDateString('zh-TW')
+              : '-'}
+          </p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-3">
+          <p className="text-xs text-gray-500">金額</p>
+          <p className="font-medium text-gray-900">
+            ${summary.next_amount?.toLocaleString() || 0}
+          </p>
+        </div>
+      </div>
+
+      {/* 進度條 */}
+      <div className="mb-4">
+        <div className="flex justify-between text-xs text-gray-500 mb-1">
+          <span>收款進度</span>
+          <span>${summary.total_paid?.toLocaleString()} / ${summary.total_expected?.toLocaleString()}</span>
+        </div>
+        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-green-500 rounded-full transition-all"
+            style={{ width: `${summary.total_expected > 0 ? (summary.total_paid / summary.total_expected) * 100 : 0}%` }}
+          />
+        </div>
+      </div>
+
+      {/* 展開/收起按鈕 */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-center gap-1 text-sm text-gray-500 hover:text-gray-700 py-2"
+      >
+        {expanded ? (
+          <>
+            <ChevronUp className="w-4 h-4" />
+            收起明細
+          </>
+        ) : (
+          <>
+            <ChevronDown className="w-4 h-4" />
+            查看近期繳費 ({cycles?.length || 0} 期)
+          </>
+        )}
+      </button>
+
+      {/* 週期明細 */}
+      {expanded && cycles && cycles.length > 0 && (
+        <div className="mt-4 border-t pt-4">
+          <div className="space-y-2">
+            {cycles.map((cycle) => (
+              <div
+                key={cycle.period_index}
+                className={`flex items-center justify-between p-3 rounded-lg ${
+                  cycle.is_current ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  {getStatusIcon(cycle.payment_status, cycle.is_overdue)}
+                  <div>
+                    <p className="text-sm font-medium">
+                      第 {cycle.period_index} 期
+                      {cycle.is_current && (
+                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+                          當期
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {cycle.payment_period} · 應收 {new Date(cycle.due_date).toLocaleDateString('zh-TW')}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium">${cycle.expected_amount?.toLocaleString()}</p>
+                  <span className={`text-xs px-2 py-0.5 rounded ${getStatusColor(cycle.payment_status, cycle.is_overdue)}`}>
+                    {getStatusText(cycle.payment_status, cycle.is_overdue)}
+                  </span>
+                  {cycle.invoice_number && (
+                    <p className="text-xs text-gray-400 mt-1">{cycle.invoice_number}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <Link
+            to={`/payments?contract_id=${contractId}`}
+            className="mt-4 block text-center text-sm text-primary-600 hover:text-primary-700"
+          >
+            查看全部付款記錄 →
+          </Link>
         </div>
       )}
     </div>
@@ -336,12 +512,15 @@ export default function ContractWorkspace() {
           </div>
         </div>
 
-        {/* Decision Panel */}
+        {/* Decision Panel + 繳費週期 */}
         <div className="space-y-6">
           <div className="bg-white rounded-xl border shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">目前狀態</h2>
             <DecisionPanel decision={decision} />
           </div>
+
+          {/* 繳費週期 */}
+          <BillingCyclesPanel contractId={contractId} />
 
           {/* 快速操作 */}
           <div className="bg-white rounded-xl border shadow-sm p-6">

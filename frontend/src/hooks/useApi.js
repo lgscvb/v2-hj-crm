@@ -1048,3 +1048,39 @@ export function useTerminationStats() {
     staleTime: 30000 // 30 秒內不重新 fetch
   })
 }
+
+// ============================================================================
+// 合約繳費週期
+// ============================================================================
+
+// 合約繳費週期列表（含付款/發票狀態）
+export function useContractBillingCycles(contractId, pastN = 2, futureN = 3) {
+  return useQuery({
+    queryKey: ['contract-billing-cycles', contractId, pastN, futureN],
+    queryFn: async () => {
+      if (!contractId) return []
+      const data = await db.rpc('get_contract_billing_cycles', {
+        p_contract_id: contractId,
+        p_past_n: pastN,
+        p_future_n: futureN
+      })
+      return Array.isArray(data) ? data : []
+    },
+    enabled: !!contractId
+  })
+}
+
+// 合約繳費週期摘要（已繳/待繳/逾期/未建立期數）
+export function useContractBillingSummary(contractId) {
+  return useQuery({
+    queryKey: ['contract-billing-summary', contractId],
+    queryFn: async () => {
+      if (!contractId) return null
+      const data = await db.rpc('get_contract_billing_summary', {
+        p_contract_id: contractId
+      })
+      return data
+    },
+    enabled: !!contractId
+  })
+}
