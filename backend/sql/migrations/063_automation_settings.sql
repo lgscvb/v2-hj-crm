@@ -1,42 +1,15 @@
 -- 063_automation_settings.sql
 -- 自動化設定（催簽、催繳、自動開票等）
 -- Date: 2025-12-28
+--
+-- 注意：system_settings 表結構：
+--   setting_key (varchar), setting_value (text), setting_type (varchar), description (text)
 
 -- ============================================================================
--- 1. 更新系統設定
+-- 1. 新增 automation 設定
 -- ============================================================================
 
--- 更新 renewal 設定，加入催簽相關參數
-UPDATE system_settings
-SET value = value || '{
-    "sign_reminder_days": 7,
-    "sign_reminder_throttle_days": 3,
-    "auto_sign_reminder": false
-}'::jsonb
-WHERE key = 'renewal';
-
--- 更新 payment 設定，加入催繳相關參數
-UPDATE system_settings
-SET value = value || '{
-    "payment_reminder_throttle_days": 7,
-    "auto_payment_reminder": false,
-    "overdue_reminder_days": [1, 7, 14, 30]
-}'::jsonb
-WHERE key = 'payment';
-
--- 更新 invoice 設定，加入自動開票參數
-UPDATE system_settings
-SET value = value || '{
-    "auto_invoice_after_payment": false,
-    "invoice_delay_days": 0
-}'::jsonb
-WHERE key = 'invoice';
-
--- ============================================================================
--- 2. 新增 automation 分類設定
--- ============================================================================
-
-INSERT INTO system_settings (key, value, description, category)
+INSERT INTO system_settings (setting_key, setting_value, setting_type, description)
 VALUES (
     'automation',
     '{
@@ -63,12 +36,12 @@ VALUES (
             "medium_to_high_days": 7,
             "high_to_urgent_days": 14
         }
-    }'::jsonb,
-    '自動化設定（催簽、催繳、自動開票、優先級升級）',
-    'automation'
+    }',
+    'json',
+    '自動化設定（催簽、催繳、自動開票、優先級升級）'
 )
-ON CONFLICT (key) DO UPDATE
-SET value = EXCLUDED.value,
+ON CONFLICT (setting_key) DO UPDATE
+SET setting_value = EXCLUDED.setting_value,
     description = EXCLUDED.description,
     updated_at = NOW();
 
