@@ -530,6 +530,152 @@ async def commission_pay(
         raise Exception(f"佣金付款失敗: {e}")
 
 
+async def commission_mark_eligible(
+    commission_id: int,
+    notes: str = None
+) -> Dict[str, Any]:
+    """
+    標記佣金為可付款狀態（pending → eligible）
+
+    只有滿 6 個月的佣金才能標記為 eligible
+
+    Args:
+        commission_id: 佣金ID
+        notes: 備註
+
+    Returns:
+        更新後的佣金資料
+    """
+    try:
+        # 先檢查佣金狀態
+        commissions = await postgrest_get("commissions", {"id": f"eq.{commission_id}"})
+        if not commissions:
+            return {"success": False, "message": "找不到佣金記錄"}
+
+        commission = commissions[0]
+
+        # 驗證狀態必須是 pending 才能標記為 eligible
+        if commission.get("status") != "pending":
+            current_status = commission.get("status", "unknown")
+            return {
+                "success": False,
+                "message": f"佣金狀態為 {current_status}，只有 pending 狀態才能標記為 eligible"
+            }
+
+        # 檢查是否已滿 6 個月
+        eligible_date = commission.get("eligible_date")
+        if eligible_date:
+            from datetime import date
+            if isinstance(eligible_date, str):
+                eligible_date = date.fromisoformat(eligible_date)
+            if eligible_date > date.today():
+                return {
+                    "success": False,
+                    "message": f"佣金尚未滿 6 個月，可付款日期為 {eligible_date}"
+                }
+
+        # 更新佣金為 eligible
+        update_data = {
+            "status": "eligible"
+        }
+
+        if notes:
+            update_data["notes"] = notes
+
+        result = await postgrest_patch(
+            "commissions",
+            {"id": f"eq.{commission_id}"},
+            update_data
+        )
+
+        if not result:
+            return {"success": False, "message": "更新失敗"}
+
+        updated_commission = result[0] if isinstance(result, list) else result
+
+        return {
+            "success": True,
+            "message": f"佣金 #{commission_id} 已標記為可付款",
+            "commission": updated_commission
+        }
+    except Exception as e:
+        logger.error(f"commission_mark_eligible error: {e}")
+        raise Exception(f"標記佣金可付款失敗: {e}")
+
+
+async def commission_cancel(
+    commission_id: int,
+    reason: str
+) -> Dict[str, Any]:
+    """
+    取消佣金（pending/eligible → cancelled）
+
+    通常用於：合約終止、客戶違約、重複建立等情況
+
+    Args:
+        commission_id: 佣金ID
+        reason: 取消原因（必填）
+
+    Returns:
+        更新後的佣金資料
+    """
+    if not reason or not reason.strip():
+        raise ValueError("必須提供取消原因")
+
+    try:
+        # 先檢查佣金狀態
+        commissions = await postgrest_get("commissions", {"id": f"eq.{commission_id}"})
+        if not commissions:
+            return {"success": False, "message": "找不到佣金記錄"}
+
+        commission = commissions[0]
+        current_status = commission.get("status", "unknown")
+
+        # 驗證狀態：已付款的不能取消
+        if current_status == "paid":
+            return {
+                "success": False,
+                "message": "佣金已付款，無法取消"
+            }
+
+        if current_status == "cancelled":
+            return {
+                "success": False,
+                "message": "佣金已取消"
+            }
+
+        # 更新佣金為 cancelled
+        update_data = {
+            "status": "cancelled",
+            "notes": f"[取消] {datetime.now().strftime('%Y-%m-%d')} - {reason.strip()}"
+        }
+
+        # 如果原本有備註，附加
+        original_notes = commission.get("notes")
+        if original_notes:
+            update_data["notes"] = f"{original_notes}\n{update_data['notes']}"
+
+        result = await postgrest_patch(
+            "commissions",
+            {"id": f"eq.{commission_id}"},
+            update_data
+        )
+
+        if not result:
+            return {"success": False, "message": "更新失敗"}
+
+        updated_commission = result[0] if isinstance(result, list) else result
+
+        return {
+            "success": True,
+            "message": f"佣金 #{commission_id} 已取消（原狀態: {current_status}）",
+            "commission": updated_commission
+        }
+    except Exception as e:
+        logger.error(f"commission_cancel error: {e}")
+        raise Exception(f"取消佣金失敗: {e}")
+
+
 async def payment_undo(
     payment_id: int,
     reason: str

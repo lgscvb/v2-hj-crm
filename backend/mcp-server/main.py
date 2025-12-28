@@ -172,6 +172,8 @@ from tools.crm_tools import (
     contract_renew,
     contract_update_tax_id,
     commission_pay,
+    commission_mark_eligible,
+    commission_cancel,
     payment_undo
 )
 
@@ -580,6 +582,22 @@ MCP_TOOLS = {
             "notes": {"type": "string", "description": "備註", "optional": True}
         },
         "handler": commission_pay
+    },
+    "commission_mark_eligible": {
+        "description": "標記佣金為可付款狀態（pending → eligible），需滿 6 個月",
+        "parameters": {
+            "commission_id": {"type": "integer", "description": "佣金ID", "required": True},
+            "notes": {"type": "string", "description": "備註", "optional": True}
+        },
+        "handler": commission_mark_eligible
+    },
+    "commission_cancel": {
+        "description": "取消佣金（合約終止、客戶違約等情況使用）",
+        "parameters": {
+            "commission_id": {"type": "integer", "description": "佣金ID", "required": True},
+            "reason": {"type": "string", "description": "取消原因", "required": True}
+        },
+        "handler": commission_cancel
     },
 
     # 續約流程管理工具

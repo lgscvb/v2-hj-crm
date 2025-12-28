@@ -212,11 +212,23 @@ const getActionHandler = (processKey, actionKey) => {
           payment_reference: payload.payment_reference,
           paid_at: payload.paid_at || new Date().toISOString().split('T')[0]
         })
-      }
+      },
 
-      // TODO: 以下工具尚未實作
-      // MARK_ELIGIBLE: 標記可付款（需建立 commission_mark_eligible MCP tool）
-      // CANCEL_COMMISSION: 取消佣金（需建立 commission_cancel MCP tool）
+      // 標記可付款（pending → eligible）
+      MARK_ELIGIBLE: async (commissionId, payload) => {
+        return callTool('commission_mark_eligible', {
+          commission_id: commissionId,
+          notes: payload.notes
+        })
+      },
+
+      // 取消佣金
+      CANCEL_COMMISSION: async (commissionId, payload) => {
+        return callTool('commission_cancel', {
+          commission_id: commissionId,
+          reason: payload.reason
+        })
+      }
     }
   }
 
@@ -241,7 +253,7 @@ export const getAvailableActions = (processKey) => {
     invoice: ['ISSUE_INVOICE', 'VOID_INVOICE'],    // TODO: UPDATE_CUSTOMER
     termination: ['UPDATE_CHECKLIST', 'UPDATE_STATUS'],
     signing: ['GENERATE_PDF', 'SEND_FOR_SIGN', 'MARK_SIGNED'],
-    commission: ['PAY_COMMISSION']                  // TODO: MARK_ELIGIBLE, CANCEL_COMMISSION
+    commission: ['PAY_COMMISSION', 'MARK_ELIGIBLE', 'CANCEL_COMMISSION']
   }
 
   return actionMap[processKey] || []
