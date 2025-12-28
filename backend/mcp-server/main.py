@@ -272,7 +272,8 @@ from tools.renewal_tools_v3 import (
     renewal_activate,
     renewal_cancel_draft,
     renewal_send_for_sign,
-    renewal_mark_signed
+    renewal_mark_signed,
+    renewal_send_sign_reminder
 )
 
 from tools.settings_tools import (
@@ -1116,6 +1117,14 @@ MCP_TOOLS = {
             "auto_activate": {"type": "boolean", "description": "是否自動啟用合約", "default": False}
         },
         "handler": renewal_mark_signed
+    },
+    "renewal_send_sign_reminder": {
+        "description": "發送催簽提醒 - 支援傳入原合約或續約合約 ID，有節流機制",
+        "parameters": {
+            "contract_id": {"type": "integer", "description": "合約 ID（原合約或續約合約皆可）", "required": True},
+            "force": {"type": "boolean", "description": "是否強制發送（忽略節流限制）", "default": False}
+        },
+        "handler": renewal_send_sign_reminder
     },
 
     # ==========================================================================

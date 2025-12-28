@@ -627,6 +627,186 @@ async def renewal_mark_signed(
         return {"success": False, "error": str(e)}
 
 
+async def renewal_send_sign_reminder(
+    contract_id: int,
+    force: bool = False
+) -> Dict[str, Any]:
+    """
+    發送催簽提醒
+
+    支援傳入原合約 ID 或續約合約 ID：
+    - 如果是原合約，會自動找到對應的待簽續約合約
+    - 如果是續約合約（pending_sign），直接使用
+
+    節流機制：同一合約 N 天內只能催簽一次（可透過 force=True 強制發送）
+
+    Args:
+        contract_id: 合約 ID（原合約或續約合約）
+        force: 是否強制發送（忽略節流限制）
+
+    Returns:
+        發送結果
+    """
+    try:
+        # 1. 取得合約資訊
+        contracts = await postgrest_get("contracts", {
+            "id": f"eq.{contract_id}",
+            "select": "id,contract_number,status,next_contract_id,customer_id,sent_for_sign_at"
+        })
+
+        if not contracts:
+            return {"success": False, "error": "找不到合約", "code": "NOT_FOUND"}
+
+        contract = contracts[0]
+
+        # 2. 找到待簽合約
+        pending_sign_contract = None
+
+        if contract["status"] == "pending_sign":
+            # 直接是待簽合約
+            pending_sign_contract = contract
+        elif contract.get("next_contract_id"):
+            # 原合約，找續約合約
+            next_contracts = await postgrest_get("contracts", {
+                "id": f"eq.{contract['next_contract_id']}",
+                "select": "id,contract_number,status,customer_id,sent_for_sign_at"
+            })
+            if next_contracts and next_contracts[0]["status"] == "pending_sign":
+                pending_sign_contract = next_contracts[0]
+
+        if not pending_sign_contract:
+            return {
+                "success": False,
+                "error": "找不到待簽合約，請確認合約狀態為 pending_sign",
+                "code": "NO_PENDING_SIGN",
+                "current_status": contract["status"]
+            }
+
+        target_contract_id = pending_sign_contract["id"]
+
+        # 3. 檢查節流（從 notification_logs 查詢上次催簽時間）
+        if not force:
+            # 取得設定的節流天數（預設 3 天）
+            settings = await postgrest_get("system_settings", {"key": "eq.automation"})
+            throttle_days = 3
+            if settings:
+                automation = settings[0].get("value", {})
+                throttle_days = automation.get("sign_reminder", {}).get("throttle_days", 3)
+
+            # 查詢最近的催簽記錄
+            recent_reminders = await postgrest_get("notification_logs", {
+                "contract_id": f"eq.{target_contract_id}",
+                "notification_type": "eq.sign_reminder",
+                "status": "eq.sent",
+                "order": "created_at.desc",
+                "limit": "1"
+            })
+
+            if recent_reminders:
+                last_reminder = recent_reminders[0]
+                last_time = datetime.fromisoformat(last_reminder["created_at"].replace("Z", "+00:00"))
+                days_since = (datetime.now(last_time.tzinfo) - last_time).days
+
+                if days_since < throttle_days:
+                    return {
+                        "success": False,
+                        "error": f"距離上次催簽僅 {days_since} 天，需間隔 {throttle_days} 天",
+                        "code": "THROTTLED",
+                        "last_reminder_at": last_reminder["created_at"],
+                        "days_since": days_since,
+                        "throttle_days": throttle_days,
+                        "can_force": True
+                    }
+
+        # 4. 取得客戶資訊
+        customers = await postgrest_get("customers", {
+            "id": f"eq.{pending_sign_contract['customer_id']}",
+            "select": "id,name,line_user_id,phone,email"
+        })
+
+        if not customers:
+            return {"success": False, "error": "找不到客戶資料", "code": "CUSTOMER_NOT_FOUND"}
+
+        customer = customers[0]
+
+        if not customer.get("line_user_id"):
+            return {
+                "success": False,
+                "error": f"客戶 {customer['name']} 沒有綁定 LINE",
+                "code": "NO_LINE_ID",
+                "customer_name": customer["name"]
+            }
+
+        # 5. 計算等待天數
+        sent_at = pending_sign_contract.get("sent_for_sign_at")
+        days_waiting = 0
+        if sent_at:
+            sent_date = datetime.fromisoformat(sent_at.replace("Z", "+00:00"))
+            days_waiting = (datetime.now(sent_date.tzinfo) - sent_date).days
+
+        # 6. 發送 LINE 訊息
+        message = (
+            f"📋 合約簽署提醒\n\n"
+            f"親愛的 {customer['name']} 您好，\n\n"
+            f"您的合約（{pending_sign_contract['contract_number']}）已送出簽署，"
+            f"目前已等待 {days_waiting} 天。\n\n"
+            f"請盡快完成簽署，如有任何問題歡迎聯繫我們！\n\n"
+            f"Hour Jungle 敬上"
+        )
+
+        # 呼叫 LINE 發送（透過 postgrest RPC）
+        try:
+            from tools.line_tools import send_line_message
+            line_result = await send_line_message(
+                line_user_id=customer["line_user_id"],
+                message=message
+            )
+        except Exception as line_error:
+            logger.error(f"LINE 發送失敗: {line_error}")
+            line_result = {"success": False, "error": str(line_error)}
+
+        # 7. 記錄通知
+        log_status = "sent" if line_result.get("success") else "failed"
+        log_error = None if line_result.get("success") else line_result.get("error")
+
+        await postgrest_request(
+            "POST",
+            "notification_logs",
+            data={
+                "notification_type": "sign_reminder",
+                "customer_id": customer["id"],
+                "contract_id": target_contract_id,
+                "recipient_name": customer["name"],
+                "recipient_line_id": customer.get("line_user_id"),
+                "message_content": message,
+                "status": log_status,
+                "error_message": log_error,
+                "triggered_by": "manual"
+            }
+        )
+
+        if line_result.get("success"):
+            return {
+                "success": True,
+                "contract_id": target_contract_id,
+                "contract_number": pending_sign_contract["contract_number"],
+                "customer_name": customer["name"],
+                "days_waiting": days_waiting,
+                "message": f"已發送催簽提醒給 {customer['name']}"
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"LINE 發送失敗: {line_result.get('error')}",
+                "code": "LINE_FAILED",
+                "logged": True
+            }
+
+    except Exception as e:
+        logger.error(f"renewal_send_sign_reminder error: {e}")
+        return {"success": False, "error": str(e)}
+
+
 # ============================================================================
 # MCP 工具定義
 # ============================================================================
@@ -804,6 +984,24 @@ RENEWAL_V3_TOOLS = [
                 "auto_activate": {
                     "type": "boolean",
                     "description": "是否自動啟用合約（預設 false）"
+                }
+            },
+            "required": ["contract_id"]
+        }
+    },
+    {
+        "name": "renewal_send_sign_reminder",
+        "description": "發送催簽提醒 - 支援傳入原合約或續約合約 ID，有節流機制",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "contract_id": {
+                    "type": "integer",
+                    "description": "合約 ID（原合約或續約合約皆可）"
+                },
+                "force": {
+                    "type": "boolean",
+                    "description": "是否強制發送（忽略節流限制，預設 false）"
                 }
             },
             "required": ["contract_id"]

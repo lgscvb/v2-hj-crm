@@ -91,6 +91,14 @@ const getActionHandler = (processKey, actionKey) => {
           contract_id: contractId,
           flag_type: 'notified'
         })
+      },
+
+      // 發送催簽提醒
+      SEND_SIGN_REMINDER: async (contractId, payload) => {
+        return callTool('renewal_send_sign_reminder', {
+          contract_id: contractId,
+          force: payload.force || false
+        })
       }
     },
 
@@ -197,6 +205,14 @@ const getActionHandler = (processKey, actionKey) => {
           contract_id: contractId,
           signed_date: payload.signed_date
         })
+      },
+
+      // 發送催簽提醒
+      SEND_SIGN_REMINDER: async (contractId, payload) => {
+        return callTool('renewal_send_sign_reminder', {
+          contract_id: contractId,
+          force: payload.force || false
+        })
       }
     },
 
@@ -248,11 +264,11 @@ export const hasAction = (processKey, actionKey) => {
  */
 export const getAvailableActions = (processKey) => {
   const actionMap = {
-    renewal: ['CREATE_DRAFT', 'SEND_FOR_SIGN', 'MARK_SIGNED', 'ACTIVATE', 'SET_CONFIRMED', 'SET_NOTIFIED'],
+    renewal: ['CREATE_DRAFT', 'SEND_FOR_SIGN', 'MARK_SIGNED', 'ACTIVATE', 'SET_CONFIRMED', 'SET_NOTIFIED', 'SEND_SIGN_REMINDER'],
     payment: ['SEND_REMINDER', 'RECORD_PAYMENT', 'REQUEST_WAIVE', 'UNDO_PAYMENT'],
     invoice: ['ISSUE_INVOICE', 'VOID_INVOICE'],    // TODO: UPDATE_CUSTOMER
     termination: ['UPDATE_CHECKLIST', 'UPDATE_STATUS'],
-    signing: ['GENERATE_PDF', 'SEND_FOR_SIGN', 'MARK_SIGNED'],
+    signing: ['GENERATE_PDF', 'SEND_FOR_SIGN', 'MARK_SIGNED', 'SEND_SIGN_REMINDER'],
     commission: ['PAY_COMMISSION', 'MARK_ELIGIBLE', 'CANCEL_COMMISSION']
   }
 

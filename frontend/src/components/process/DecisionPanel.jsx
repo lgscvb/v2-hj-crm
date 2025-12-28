@@ -97,6 +97,7 @@ const ACTION_LABELS = {
   ACTIVATE: '啟用合約',
   SET_CONFIRMED: '設定續約意願',
   SET_NOTIFIED: '標記已通知',
+  SEND_SIGN_REMINDER: '發送催簽提醒',
 
   // 付款流程
   SEND_REMINDER: '發送催繳通知',
