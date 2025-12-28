@@ -114,32 +114,20 @@ const getActionHandler = (processKey, actionKey) => {
           paid_at: payload.paid_at,
           payment_reference: payload.payment_reference
         })
-      },
-
-      // 申請免收
-      REQUEST_WAIVE: async (paymentId, payload) => {
-        return callTool('request_waive', {
-          payment_id: paymentId,
-          reason: payload.reason
-        })
-      },
-
-      // 撤銷付款
-      UNDO_PAYMENT: async (paymentId, payload) => {
-        return callTool('undo_payment', {
-          payment_id: paymentId,
-          reason: payload.reason
-        })
       }
+
+      // TODO: 以下工具尚未實作
+      // REQUEST_WAIVE: 申請免收（需建立 request_waive MCP tool）
+      // UNDO_PAYMENT: 撤銷付款（需建立 undo_payment MCP tool）
     },
 
     // ========================================
     // 發票流程 (Invoice)
     // ========================================
     invoice: {
-      // 開立發票
+      // 開立發票（使用 invoice_create）
       ISSUE_INVOICE: async (paymentId, payload) => {
-        return callTool('invoice_issue', {
+        return callTool('invoice_create', {
           payment_id: paymentId,
           ...payload
         })
@@ -167,9 +155,9 @@ const getActionHandler = (processKey, actionKey) => {
         })
       },
 
-      // 更新狀態
+      // 更新狀態（使用 v2 版本）
       UPDATE_STATUS: async (caseId, payload) => {
-        return callTool('termination_update_status', {
+        return callTool('termination_update_status_v2', {
           case_id: caseId,
           status: payload.status
         })
@@ -204,13 +192,6 @@ const getActionHandler = (processKey, actionKey) => {
     // 佣金流程 (Commission)
     // ========================================
     commission: {
-      // 標記為可付款
-      MARK_ELIGIBLE: async (commissionId, payload) => {
-        return callTool('commission_mark_eligible', {
-          commission_id: commissionId
-        })
-      },
-
       // 支付佣金
       PAY_COMMISSION: async (commissionId, payload) => {
         return callTool('commission_pay', {
@@ -219,15 +200,11 @@ const getActionHandler = (processKey, actionKey) => {
           payment_reference: payload.payment_reference,
           paid_at: payload.paid_at || new Date().toISOString().split('T')[0]
         })
-      },
-
-      // 取消佣金
-      CANCEL_COMMISSION: async (commissionId, payload) => {
-        return callTool('commission_cancel', {
-          commission_id: commissionId,
-          reason: payload.reason
-        })
       }
+
+      // TODO: 以下工具尚未實作
+      // MARK_ELIGIBLE: 標記可付款（需建立 commission_mark_eligible MCP tool）
+      // CANCEL_COMMISSION: 取消佣金（需建立 commission_cancel MCP tool）
     }
   }
 
@@ -243,15 +220,16 @@ export const hasAction = (processKey, actionKey) => {
 
 /**
  * 取得流程所有可用行動
+ * 註：僅列出已實作的 MCP 工具映射
  */
 export const getAvailableActions = (processKey) => {
   const actionMap = {
     renewal: ['CREATE_DRAFT', 'SEND_FOR_SIGN', 'MARK_SIGNED', 'ACTIVATE', 'SET_CONFIRMED', 'SET_NOTIFIED'],
-    payment: ['SEND_REMINDER', 'RECORD_PAYMENT', 'REQUEST_WAIVE', 'UNDO_PAYMENT'],
-    invoice: ['ISSUE_INVOICE', 'VOID_INVOICE', 'UPDATE_CUSTOMER'],
+    payment: ['SEND_REMINDER', 'RECORD_PAYMENT'],  // TODO: REQUEST_WAIVE, UNDO_PAYMENT
+    invoice: ['ISSUE_INVOICE', 'VOID_INVOICE'],    // TODO: UPDATE_CUSTOMER
     termination: ['UPDATE_CHECKLIST', 'UPDATE_STATUS'],
     signing: ['GENERATE_PDF', 'SEND_FOR_SIGN', 'MARK_SIGNED'],
-    commission: ['MARK_ELIGIBLE', 'PAY_COMMISSION', 'CANCEL_COMMISSION']
+    commission: ['PAY_COMMISSION']                  // TODO: MARK_ELIGIBLE, CANCEL_COMMISSION
   }
 
   return actionMap[processKey] || []

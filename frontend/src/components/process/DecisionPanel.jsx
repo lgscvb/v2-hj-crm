@@ -61,7 +61,26 @@ const BLOCKED_LABELS = {
   need_issue_invoice: '待開立發票',
   need_reissue: '作廢待重開',
 
+  // 佣金流程
+  contract_terminated: '合約已終止，待確認',
+  payment_overdue: '佣金付款逾期',
+  ready_to_pay: '可付款',
+  almost_eligible: '即將可付款',
+  waiting_eligibility: '等待滿 6 個月',
+
   // 解約流程
+  need_confirm_notice: '待確認解約通知',
+  need_move_out: '待客戶搬遷',
+  need_return_keys: '待回收鑰匙',
+  need_inspect_room: '待驗收場地',
+  need_submit_doc: '待送國稅局公文',
+  doc_overdue: '公文逾期（超過30天）',
+  waiting_doc_approval: '等待公文核准',
+  settlement_overdue: '結算逾期',
+  need_calculate_settlement: '待計算押金結算',
+  refund_overdue: '退款逾期',
+  need_process_refund: '待處理退款',
+  ready_to_complete: '可完成解約',
   pending_checklist: '待完成退租清單',
   waiting_approval: '等待核准',
 
@@ -71,19 +90,38 @@ const BLOCKED_LABELS = {
 
 // 行動標籤對照表
 const ACTION_LABELS = {
+  // 續約流程
   CREATE_DRAFT: '建立草稿',
   SEND_FOR_SIGN: '送出簽署',
   MARK_SIGNED: '標記已簽回',
   ACTIVATE: '啟用合約',
+  SET_CONFIRMED: '設定續約意願',
+  SET_NOTIFIED: '標記已通知',
+
+  // 付款流程
   SEND_REMINDER: '發送催繳通知',
   SEND_LEGAL_NOTICE: '發送存證信函',
   RECORD_PAYMENT: '記錄收款',
   REQUEST_WAIVE: '申請免收',
+
+  // 發票流程
   ISSUE_INVOICE: '開立發票',
+  UPDATE_CUSTOMER: '更新客戶資料',
+
+  // 佣金流程
+  CANCEL_COMMISSION: '取消佣金',
+  PAY_COMMISSION: '支付佣金',
+  MARK_ELIGIBLE: '標記可付款',
+
+  // 解約流程
   UPDATE_CHECKLIST: '更新清單',
   UPDATE_STATUS: '更新狀態',
-  SET_CONFIRMED: '設定續約意願',
-  SET_NOTIFIED: '標記已通知'
+  CONFIRM_NOTICE: '確認通知',
+  SUBMIT_DOC: '送出公文',
+  APPROVE_DOC: '核准公文',
+  CALCULATE_SETTLEMENT: '計算結算',
+  PROCESS_REFUND: '處理退款',
+  COMPLETE_TERMINATION: '完成解約'
 }
 
 // 優先級圖示
