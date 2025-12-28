@@ -198,6 +198,36 @@ const getActionHandler = (processKey, actionKey) => {
           signed_date: payload.signed_date
         })
       }
+    },
+
+    // ========================================
+    // 佣金流程 (Commission)
+    // ========================================
+    commission: {
+      // 標記為可付款
+      MARK_ELIGIBLE: async (commissionId, payload) => {
+        return callTool('commission_mark_eligible', {
+          commission_id: commissionId
+        })
+      },
+
+      // 支付佣金
+      PAY_COMMISSION: async (commissionId, payload) => {
+        return callTool('commission_pay', {
+          commission_id: commissionId,
+          payment_method: payload.payment_method,
+          payment_reference: payload.payment_reference,
+          paid_at: payload.paid_at || new Date().toISOString().split('T')[0]
+        })
+      },
+
+      // 取消佣金
+      CANCEL_COMMISSION: async (commissionId, payload) => {
+        return callTool('commission_cancel', {
+          commission_id: commissionId,
+          reason: payload.reason
+        })
+      }
     }
   }
 
@@ -218,9 +248,10 @@ export const getAvailableActions = (processKey) => {
   const actionMap = {
     renewal: ['CREATE_DRAFT', 'SEND_FOR_SIGN', 'MARK_SIGNED', 'ACTIVATE', 'SET_CONFIRMED', 'SET_NOTIFIED'],
     payment: ['SEND_REMINDER', 'RECORD_PAYMENT', 'REQUEST_WAIVE', 'UNDO_PAYMENT'],
-    invoice: ['ISSUE_INVOICE', 'VOID_INVOICE'],
+    invoice: ['ISSUE_INVOICE', 'VOID_INVOICE', 'UPDATE_CUSTOMER'],
     termination: ['UPDATE_CHECKLIST', 'UPDATE_STATUS'],
-    signing: ['GENERATE_PDF', 'SEND_FOR_SIGN', 'MARK_SIGNED']
+    signing: ['GENERATE_PDF', 'SEND_FOR_SIGN', 'MARK_SIGNED'],
+    commission: ['MARK_ELIGIBLE', 'PAY_COMMISSION', 'CANCEL_COMMISSION']
   }
 
   return actionMap[processKey] || []
