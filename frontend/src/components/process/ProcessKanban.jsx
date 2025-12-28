@@ -88,7 +88,7 @@ function ProcessColumn({ processKey, config, onItemClick, maxItems = 5 }) {
         order: 'decision_priority.asc,is_overdue.desc',
         limit: maxItems + 1  // 多取一筆判斷是否有更多
       }
-      return db.get(config.view, params)
+      return db.query(config.view, params)
     },
     refetchInterval: 60000  // 每分鐘刷新
   })

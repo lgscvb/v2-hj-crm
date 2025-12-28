@@ -82,7 +82,7 @@ function ProcessListView({ onItemClick }) {
         processKeys.map(async (key) => {
           const config = PROCESS_CONFIG[key]
           try {
-            const items = await db.get(config.view, {
+            const items = await db.query(config.view, {
               ...config.filter,
               order: 'decision_priority.asc,is_overdue.desc',
               limit: 50
@@ -357,9 +357,9 @@ export default function ProcessDashboard() {
     queryKey: ['process-dashboard-stats'],
     queryFn: async () => {
       const [payment, invoice, commission] = await Promise.all([
-        db.get('v_payment_dashboard_stats', {}),
-        db.get('v_invoice_dashboard_stats', {}),
-        db.get('v_commission_dashboard_stats', {})
+        db.query('v_payment_dashboard_stats', {}),
+        db.query('v_invoice_dashboard_stats', {}),
+        db.query('v_commission_dashboard_stats', {})
       ])
 
       return {
