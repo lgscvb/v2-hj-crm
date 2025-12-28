@@ -171,7 +171,7 @@ async def invoice_create(
         sales_amount = total_amount
         tax_amount = 0
 
-    # 發票資料結構
+    # 發票資料結構（依照光貿 API 文件範例格式）
     invoice_data = {
         "OrderId": order_id,
         "BuyerIdentifier": buyer_tax_id if buyer_tax_id else "0000000000",
@@ -180,6 +180,10 @@ async def invoice_create(
         "BuyerTelephoneNumber": "",
         "BuyerEmailAddress": "",
         "MainRemark": f"Hour Jungle 繳費單 #{payment_id}",
+        "CarrierType": "",
+        "CarrierId1": "",
+        "CarrierId2": "",
+        "NPOBAN": "",
         "ProductItem": [
             {
                 "Description": "共享空間租賃服務",
@@ -226,7 +230,8 @@ async def invoice_create(
     }
 
     logger.info(f"發票 API 請求: invoice={api_secret}, time={timestamp}")
-    logger.info(f"發票資料: {json_data[:200]}...")
+    logger.info(f"發票計算: total_amount={total_amount}, sales_amount={sales_amount}, tax_amount={tax_amount}")
+    logger.info(f"發票資料: {json_data}")
 
     # 4. 呼叫 API
     try:
