@@ -106,19 +106,31 @@ const getActionHandler = (processKey, actionKey) => {
         })
       },
 
-      // 記錄收款
+      // 記錄收款（使用 crm_record_payment）
       RECORD_PAYMENT: async (paymentId, payload) => {
-        return callTool('record_payment', {
+        return callTool('crm_record_payment', {
           payment_id: paymentId,
           payment_method: payload.payment_method,
           paid_at: payload.paid_at,
           payment_reference: payload.payment_reference
         })
-      }
+      },
 
-      // TODO: 以下工具尚未實作
-      // REQUEST_WAIVE: 申請免收（需建立 request_waive MCP tool）
-      // UNDO_PAYMENT: 撤銷付款（需建立 undo_payment MCP tool）
+      // 申請免收
+      REQUEST_WAIVE: async (paymentId, payload) => {
+        return callTool('billing_request_waive', {
+          payment_id: paymentId,
+          reason: payload.reason
+        })
+      },
+
+      // 撤銷付款
+      UNDO_PAYMENT: async (paymentId, payload) => {
+        return callTool('billing_undo_payment', {
+          payment_id: paymentId,
+          reason: payload.reason
+        })
+      }
     },
 
     // ========================================
@@ -133,10 +145,10 @@ const getActionHandler = (processKey, actionKey) => {
         })
       },
 
-      // 作廢發票
-      VOID_INVOICE: async (invoiceId, payload) => {
+      // 作廢發票（注意：invoice_void 接收 payment_id，不是 invoice_id）
+      VOID_INVOICE: async (paymentId, payload) => {
         return callTool('invoice_void', {
-          invoice_id: invoiceId,
+          payment_id: paymentId,
           reason: payload.reason
         })
       }
@@ -225,7 +237,7 @@ export const hasAction = (processKey, actionKey) => {
 export const getAvailableActions = (processKey) => {
   const actionMap = {
     renewal: ['CREATE_DRAFT', 'SEND_FOR_SIGN', 'MARK_SIGNED', 'ACTIVATE', 'SET_CONFIRMED', 'SET_NOTIFIED'],
-    payment: ['SEND_REMINDER', 'RECORD_PAYMENT'],  // TODO: REQUEST_WAIVE, UNDO_PAYMENT
+    payment: ['SEND_REMINDER', 'RECORD_PAYMENT', 'REQUEST_WAIVE', 'UNDO_PAYMENT'],
     invoice: ['ISSUE_INVOICE', 'VOID_INVOICE'],    // TODO: UPDATE_CUSTOMER
     termination: ['UPDATE_CHECKLIST', 'UPDATE_STATUS'],
     signing: ['GENERATE_PDF', 'SEND_FOR_SIGN', 'MARK_SIGNED'],
