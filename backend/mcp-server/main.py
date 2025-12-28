@@ -767,9 +767,9 @@ MCP_TOOLS = {
         "handler": create_quote_from_service_plans
     },
 
-    # 發票工具
+    # 發票工具（已收斂到 v2，使用冪等性保護）
     "invoice_create": {
-        "description": "開立電子發票（光貿 API）",
+        "description": "開立電子發票（冪等性保護，防止重複開票）",
         "parameters": {
             "payment_id": {"type": "integer", "description": "繳費記錄ID", "required": True},
             "invoice_type": {"type": "string", "description": "發票類型 (personal=個人, business=公司)", "optional": True},
@@ -778,9 +778,10 @@ MCP_TOOLS = {
             "carrier_type": {"type": "string", "description": "載具類型 (mobile=手機條碼, natural_person=自然人憑證, donate=捐贈)", "optional": True},
             "carrier_number": {"type": "string", "description": "載具號碼", "optional": True},
             "donate_code": {"type": "string", "description": "愛心碼", "optional": True},
-            "print_flag": {"type": "boolean", "description": "是否列印", "optional": True}
+            "print_flag": {"type": "boolean", "description": "是否列印", "optional": True},
+            "created_by": {"type": "string", "description": "操作者", "optional": True}
         },
-        "handler": invoice_create
+        "handler": invoice_create_v2  # 收斂到 v2 版本
     },
     "invoice_void": {
         "description": "作廢電子發票",
