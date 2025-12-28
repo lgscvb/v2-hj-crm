@@ -64,7 +64,7 @@ const PROCESS_CONFIG = {
     key: 'termination',
     label: '解約流程',
     view: 'v_termination_workspace',
-    filter: { status: 'neq.completed' },
+    filter: { status: 'not.in.(completed,cancelled)' },  // 排除已完成和已取消
     order: 'created_at.desc',  // 解約視圖沒有 decision_priority
     color: 'red'
   }
