@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   LayoutGrid,
@@ -15,10 +15,309 @@ import {
   AlertTriangle,
   Clock,
   CheckCircle,
-  TrendingUp
+  TrendingUp,
+  ChevronRight,
+  Flame,
+  ExternalLink,
+  RefreshCw as Refresh,
+  CreditCard,
+  FileText,
+  Banknote
 } from 'lucide-react'
 import { db } from '../services/api'
-import { ProcessKanban } from '../components/process'
+import { ProcessKanban, PROCESS_ICONS, PRIORITY_COLORS, OWNER_COLORS } from '../components/process'
+
+// 流程配置（與 ProcessKanban 一致）
+const PROCESS_CONFIG = {
+  renewal: {
+    key: 'renewal',
+    label: '續約',
+    view: 'v_contract_workspace',
+    filter: { decision_blocked_by: 'not.is.null' },
+    color: 'blue',
+    linkPrefix: '/contracts'
+  },
+  payment: {
+    key: 'payment',
+    label: '付款',
+    view: 'v_payment_queue',
+    filter: {},
+    color: 'green',
+    linkPrefix: '/payments'
+  },
+  invoice: {
+    key: 'invoice',
+    label: '發票',
+    view: 'v_invoice_queue',
+    filter: {},
+    color: 'purple',
+    linkPrefix: '/invoices'
+  },
+  commission: {
+    key: 'commission',
+    label: '佣金',
+    view: 'v_commission_queue',
+    filter: {},
+    color: 'orange',
+    linkPrefix: '/commissions'
+  }
+}
+
+// 優先級排序權重
+const PRIORITY_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 }
+
+/**
+ * 列表視圖組件
+ */
+function ProcessListView({ onItemClick }) {
+  const [filter, setFilter] = useState('all')  // all | renewal | payment | invoice | commission
+  const [sortBy, setSortBy] = useState('priority')  // priority | due_date | process
+
+  // 取得所有流程的資料
+  const { data: allItems, isLoading, refetch } = useQuery({
+    queryKey: ['process-list-all'],
+    queryFn: async () => {
+      const processKeys = ['renewal', 'payment', 'invoice', 'commission']
+      const results = await Promise.all(
+        processKeys.map(async (key) => {
+          const config = PROCESS_CONFIG[key]
+          try {
+            const items = await db.get(config.view, {
+              ...config.filter,
+              order: 'decision_priority.asc,is_overdue.desc',
+              limit: 50
+            })
+            return (items || []).map(item => ({
+              ...item,
+              process_key: key,
+              entity_id: item.entity_id || item.id || item.contract_id || item.payment_id,
+              title: item.title || item.contract_number || item.customer_name || `#${item.entity_id}`,
+            }))
+          } catch (err) {
+            console.error(`[ProcessListView] 載入 ${key} 失敗:`, err)
+            return []
+          }
+        })
+      )
+      return results.flat()
+    },
+    refetchInterval: 60000
+  })
+
+  // 篩選
+  const filteredItems = (allItems || []).filter(item => {
+    if (filter === 'all') return true
+    return item.process_key === filter
+  })
+
+  // 排序
+  const sortedItems = [...filteredItems].sort((a, b) => {
+    if (sortBy === 'priority') {
+      const aPriority = PRIORITY_ORDER[a.decision_priority] ?? 99
+      const bPriority = PRIORITY_ORDER[b.decision_priority] ?? 99
+      if (aPriority !== bPriority) return aPriority - bPriority
+      // 次要排序：逾期優先
+      if (a.is_overdue && !b.is_overdue) return -1
+      if (!a.is_overdue && b.is_overdue) return 1
+      return 0
+    }
+    if (sortBy === 'due_date') {
+      const aDate = a.due_date || a.decision_due_date || '9999-12-31'
+      const bDate = b.due_date || b.decision_due_date || '9999-12-31'
+      return aDate.localeCompare(bDate)
+    }
+    if (sortBy === 'process') {
+      return a.process_key.localeCompare(b.process_key)
+    }
+    return 0
+  })
+
+  // 取得流程圖示
+  const getProcessIcon = (processKey) => {
+    return PROCESS_ICONS[processKey] || Clock
+  }
+
+  // 優先級標籤
+  const getPriorityBadge = (priority) => {
+    const config = PRIORITY_COLORS[priority] || PRIORITY_COLORS.medium
+    const labels = { urgent: '緊急', high: '高', medium: '中', low: '低' }
+    return (
+      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${config.badge}`}>
+        {priority === 'urgent' && <Flame className="w-3 h-3 inline mr-0.5" />}
+        {labels[priority] || priority}
+      </span>
+    )
+  }
+
+  // 責任人標籤
+  const getOwnerBadge = (owner) => {
+    if (!owner) return null
+    const config = OWNER_COLORS[owner] || { bg: 'bg-gray-100', text: 'text-gray-700' }
+    return (
+      <span className={`text-xs px-2 py-0.5 rounded ${config.bg} ${config.text}`}>
+        {owner}
+      </span>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div className="bg-white rounded-lg border shadow-sm p-8">
+        <div className="flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+          <span className="ml-2 text-gray-500">載入中...</span>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white rounded-lg border shadow-sm">
+      {/* 篩選與排序 */}
+      <div className="p-4 border-b flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">流程：</span>
+          <div className="flex items-center bg-gray-100 rounded-lg p-1">
+            {[
+              { key: 'all', label: '全部' },
+              { key: 'renewal', label: '續約' },
+              { key: 'payment', label: '付款' },
+              { key: 'invoice', label: '發票' },
+              { key: 'commission', label: '佣金' }
+            ].map(opt => (
+              <button
+                key={opt.key}
+                onClick={() => setFilter(opt.key)}
+                className={`px-3 py-1 text-sm rounded ${filter === opt.key ? 'bg-white shadow-sm font-medium' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">排序：</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="text-sm border rounded-lg px-2 py-1"
+            >
+              <option value="priority">優先級</option>
+              <option value="due_date">到期日</option>
+              <option value="process">流程類型</option>
+            </select>
+          </div>
+
+          <button
+            onClick={() => refetch()}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+            title="重新整理"
+          >
+            <RefreshCw className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+      </div>
+
+      {/* 表格 */}
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-gray-50 text-left text-sm text-gray-500">
+            <tr>
+              <th className="px-4 py-3 font-medium">流程</th>
+              <th className="px-4 py-3 font-medium">標題</th>
+              <th className="px-4 py-3 font-medium">卡點</th>
+              <th className="px-4 py-3 font-medium">優先級</th>
+              <th className="px-4 py-3 font-medium">責任人</th>
+              <th className="px-4 py-3 font-medium">到期日</th>
+              <th className="px-4 py-3 font-medium">操作</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {sortedItems.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                  <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-400" />
+                  無待辦事項
+                </td>
+              </tr>
+            ) : (
+              sortedItems.map((item, idx) => {
+                const ProcessIcon = getProcessIcon(item.process_key)
+                const config = PROCESS_CONFIG[item.process_key]
+                const dueDate = item.due_date || item.decision_due_date
+
+                return (
+                  <tr
+                    key={`${item.process_key}-${item.entity_id}-${idx}`}
+                    className={`hover:bg-gray-50 ${item.is_overdue ? 'bg-red-50/50' : ''}`}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <ProcessIcon className={`w-4 h-4 text-${config.color}-500`} />
+                        <span className="text-sm font-medium">{config.label}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{item.title}</p>
+                        {item.customer_name && item.title !== item.customer_name && (
+                          <p className="text-xs text-gray-500">{item.customer_name}</p>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="text-sm text-gray-700">{item.decision_next_action || item.decision_blocked_by || '-'}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      {getPriorityBadge(item.decision_priority)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {getOwnerBadge(item.decision_owner)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-sm">
+                        {dueDate ? (
+                          <>
+                            <span className={item.is_overdue ? 'text-red-600 font-medium' : ''}>
+                              {new Date(dueDate).toLocaleDateString('zh-TW')}
+                            </span>
+                            {item.is_overdue && item.overdue_days > 0 && (
+                              <span className="text-xs text-red-500 ml-1">
+                                (逾期 {item.overdue_days} 天)
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => onItemClick(item)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-sm text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded transition-colors"
+                      >
+                        處理
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 底部統計 */}
+      <div className="p-4 border-t bg-gray-50 text-center text-sm text-gray-500">
+        共 {sortedItems.length} 項待處理
+      </div>
+    </div>
+  )
+}
 
 /**
  * 統計卡片
@@ -240,13 +539,9 @@ export default function ProcessDashboard() {
         />
       )}
 
-      {/* 列表視圖（簡化版） */}
+      {/* 列表視圖 */}
       {viewMode === 'list' && (
-        <div className="bg-white rounded-lg border shadow-sm p-6">
-          <p className="text-gray-500 text-center py-8">
-            列表視圖開發中...
-          </p>
-        </div>
+        <ProcessListView onItemClick={handleItemClick} />
       )}
     </div>
   )

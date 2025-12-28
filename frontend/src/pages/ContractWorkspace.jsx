@@ -4,9 +4,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { callTool } from '../services/api'
 import { useContractBillingCycles, useContractBillingSummary } from '../hooks/useApi'
 import Badge from '../components/Badge'
+import { ProcessTimeline } from '../components/process'
 import {
   ArrowLeft,
-  ArrowRight,
   Bell,
   CheckCircle,
   FileText,
@@ -19,11 +19,7 @@ import {
   ChevronLeft,
   ChevronDown,
   ChevronUp,
-  Building2,
   Calendar,
-  User,
-  Phone,
-  Mail,
   Loader2,
   XCircle,
   Circle,
@@ -37,87 +33,64 @@ import {
 } from 'lucide-react'
 
 // ============================================================================
-// Timeline 節點元件
+// 續約流程專用的時間軸詳情渲染
 // ============================================================================
 
-const STATUS_CONFIG = {
-  done: { icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-100', label: '完成' },
-  pending: { icon: Clock, color: 'text-yellow-500', bg: 'bg-yellow-100', label: '進行中' },
-  blocked: { icon: XCircle, color: 'text-red-500', bg: 'bg-red-100', label: '阻塞' },
-  draft: { icon: FileText, color: 'text-blue-500', bg: 'bg-blue-100', label: '草稿' },
-  not_started: { icon: Circle, color: 'text-gray-400', bg: 'bg-gray-100', label: '未開始' },
-  not_created: { icon: Circle, color: 'text-gray-400', bg: 'bg-gray-100', label: '未建立' },
-  'n/a': { icon: Circle, color: 'text-gray-300', bg: 'bg-gray-50', label: '不適用' },
-  unknown: { icon: AlertTriangle, color: 'text-gray-400', bg: 'bg-gray-100', label: '未知' }
-}
+function renderRenewalTimelineDetails(step) {
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return null
+    return new Date(dateStr).toLocaleString('zh-TW')
+  }
 
-function TimelineNode({ item, isLast }) {
-  const config = STATUS_CONFIG[item.status] || STATUS_CONFIG.unknown
-  const Icon = config.icon
-
-  return (
-    <div className="flex gap-4">
-      {/* 左側：圖示和連接線 */}
-      <div className="flex flex-col items-center">
-        <div className={`w-10 h-10 rounded-full ${config.bg} flex items-center justify-center`}>
-          <Icon className={`w-5 h-5 ${config.color}`} />
-        </div>
-        {!isLast && (
-          <div className="w-0.5 h-full bg-gray-200 my-2" />
-        )}
-      </div>
-
-      {/* 右側：內容 */}
-      <div className="flex-1 pb-6">
-        <div className="flex items-center justify-between">
-          <h4 className="font-medium text-gray-900">{item.label}</h4>
-          <Badge variant={item.status === 'done' ? 'success' : item.status === 'blocked' ? 'danger' : 'gray'}>
-            {config.label}
-          </Badge>
-        </div>
-
-        {/* 詳細資訊 */}
-        <div className="mt-2 text-sm text-gray-500 space-y-1">
-          {item.key === 'intent' && (
-            <>
-              {item.notified_at && <p>通知時間：{new Date(item.notified_at).toLocaleString('zh-TW')}</p>}
-              {item.confirmed_at && <p>確認時間：{new Date(item.confirmed_at).toLocaleString('zh-TW')}</p>}
-            </>
-          )}
-          {item.key === 'signing' && item.next_contract_id && (
-            <>
-              <p>續約合約 ID：{item.next_contract_id}</p>
-              {item.sent_for_sign_at && <p>送簽時間：{new Date(item.sent_for_sign_at).toLocaleString('zh-TW')}</p>}
-              {item.days_pending > 0 && !item.next_signed_at && (
-                <p className={item.days_pending > 14 ? "text-red-600 font-medium" : "text-yellow-600"}>
-                  已等待 {item.days_pending} 天{item.days_pending > 14 && '（逾期）'}
-                </p>
-              )}
-              {item.next_signed_at && <p className="text-green-600">簽署時間：{new Date(item.next_signed_at).toLocaleString('zh-TW')}</p>}
-            </>
-          )}
-          {item.key === 'signing' && !item.next_contract_id && item.status === 'not_created' && (
-            <p className="text-gray-400">尚未建立續約合約</p>
-          )}
-          {item.key === 'payment' && (
-            <>
-              {item.payment_status && <p>狀態：{item.payment_status}</p>}
-              {item.paid_at && <p>付款時間：{new Date(item.paid_at).toLocaleString('zh-TW')}</p>}
-            </>
-          )}
-          {item.key === 'invoice' && (
-            <>
-              {item.invoice_number && <p>發票號碼：{item.invoice_number}</p>}
-              {item.invoice_status && <p>狀態：{item.invoice_status}</p>}
-            </>
-          )}
-          {item.key === 'activation' && item.next_status && (
-            <p>合約狀態：{item.next_status}</p>
-          )}
-        </div>
-      </div>
-    </div>
-  )
+  switch (step.key) {
+    case 'intent':
+      return (
+        <>
+          {step.notified_at && <p>通知時間：{formatDateTime(step.notified_at)}</p>}
+          {step.confirmed_at && <p>確認時間：{formatDateTime(step.confirmed_at)}</p>}
+          {step.status === 'not_started' && <p className="text-gray-400">尚未通知</p>}
+        </>
+      )
+    case 'signing':
+      if (step.next_contract_id) {
+        return (
+          <>
+            <p>續約合約 ID：{step.next_contract_id}</p>
+            {step.sent_for_sign_at && <p>送簽時間：{formatDateTime(step.sent_for_sign_at)}</p>}
+            {step.days_pending > 0 && !step.next_signed_at && (
+              <p className={step.days_pending > 14 ? "text-red-600 font-medium" : "text-yellow-600"}>
+                已等待 {step.days_pending} 天{step.days_pending > 14 && '（逾期）'}
+              </p>
+            )}
+            {step.next_signed_at && <p className="text-green-600">簽署時間：{formatDateTime(step.next_signed_at)}</p>}
+          </>
+        )
+      }
+      if (step.status === 'not_created') {
+        return <p className="text-gray-400">尚未建立續約合約</p>
+      }
+      return null
+    case 'payment':
+      return (
+        <>
+          {step.payment_status && <p>狀態：{step.payment_status}</p>}
+          {step.paid_at && <p>付款時間：{formatDateTime(step.paid_at)}</p>}
+          {step.status === 'not_started' && <p className="text-gray-400">等待收款</p>}
+        </>
+      )
+    case 'invoice':
+      return (
+        <>
+          {step.invoice_number && <p>發票號碼：{step.invoice_number}</p>}
+          {step.invoice_status && <p>狀態：{step.invoice_status}</p>}
+          {step.status === 'not_started' && <p className="text-gray-400">等待開票</p>}
+        </>
+      )
+    case 'activation':
+      return step.next_status ? <p>合約狀態：{step.next_status}</p> : null
+    default:
+      return null
+  }
 }
 
 // ============================================================================
@@ -973,18 +946,14 @@ export default function ContractWorkspace() {
 
       {/* 主要內容：Timeline + Decision */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Timeline */}
+        {/* Timeline - 使用通用 ProcessTimeline 組件 */}
         <div className="lg:col-span-2 bg-white rounded-xl border shadow-sm p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-6">狀態時間線</h2>
-          <div className="space-y-0">
-            {timeline.map((item, index) => (
-              <TimelineNode
-                key={item.key}
-                item={item}
-                isLast={index === timeline.length - 1}
-              />
-            ))}
-          </div>
+          <ProcessTimeline
+            steps={timeline}
+            currentStep={decision?.blocked_by ? timeline.find(t => t.status === 'pending' || t.status === 'blocked')?.key : null}
+            renderDetails={renderRenewalTimelineDetails}
+          />
         </div>
 
         {/* Decision Panel + 繳費週期 */}
