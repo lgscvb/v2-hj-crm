@@ -35,6 +35,7 @@ import {
   FileX
 } from 'lucide-react'
 import api, { callTool } from '../services/api'
+import useStore from '../store/useStore'
 
 // 應收款可選欄位
 const DUE_COLUMNS = {
@@ -68,6 +69,7 @@ const PAID_COLUMNS = {
 
 export default function Payments() {
   const navigate = useNavigate()
+  const addNotification = useStore((state) => state.addNotification)
   const [activeTab, setActiveTab] = useState('due')
   const [showPayModal, setShowPayModal] = useState(false)
   const [showReminderModal, setShowReminderModal] = useState(false)
@@ -76,7 +78,8 @@ export default function Payments() {
   const [paymentForm, setPaymentForm] = useState({
     payment_method: 'transfer',
     reference: '',
-    paid_at: new Date().toISOString().split('T')[0]
+    paid_at: new Date().toISOString().split('T')[0],
+    autoInvoice: false  // 付款後自動開票
   })
   const [undoReason, setUndoReason] = useState('')
   const [reminderMessage, setReminderMessage] = useState('')
@@ -157,6 +160,8 @@ export default function Payments() {
   const requestWaive = useBillingRequestWaive()
   const sendReminder = useBillingSendReminder()
 
+  const [invoiceLoading, setInvoiceLoading] = useState(false)
+
   const handleRecordPayment = async () => {
     if (!selectedPayment) return
 
@@ -169,22 +174,67 @@ export default function Payments() {
         paymentDate: paymentForm.paid_at
       })
 
-      // 只有成功時才跳轉到發票頁面
+      // 只有成功時才處理後續
       if (result?.success) {
         const paymentId = selectedPayment.id
+        const shouldAutoInvoice = paymentForm.autoInvoice
+
+        // 如果選擇自動開票
+        if (shouldAutoInvoice) {
+          setInvoiceLoading(true)
+          try {
+            // 取得客戶資訊（用於開票）
+            const taxId = selectedPayment.company_tax_id || selectedPayment.tax_id
+            const hasValidTaxId = taxId && taxId !== '0000000000'
+
+            const invoiceResult = await callTool('invoice_create', {
+              payment_id: paymentId,
+              invoice_type: hasValidTaxId ? 'business' : 'personal',
+              buyer_name: selectedPayment.company_name || selectedPayment.customer_name,
+              buyer_tax_id: hasValidTaxId ? taxId : null
+            })
+
+            const invoiceData = invoiceResult?.result || invoiceResult
+            if (invoiceData?.success) {
+              // 開票成功
+              addNotification({
+                type: 'success',
+                message: `發票開立成功！發票號碼：${invoiceData.invoice_number}`
+              })
+            } else {
+              // 開票失敗，但付款已成功，提示用戶手動開票
+              addNotification({
+                type: 'warning',
+                message: `付款成功，但自動開票失敗：${invoiceData?.message || '未知錯誤'}，請手動開票`
+              })
+            }
+          } catch (invoiceError) {
+            console.error('自動開票失敗:', invoiceError)
+            addNotification({
+              type: 'warning',
+              message: '付款成功，但自動開票失敗，請手動開票'
+            })
+          } finally {
+            setInvoiceLoading(false)
+          }
+        }
 
         setShowPayModal(false)
         setSelectedPayment(null)
         setPaymentForm({
           payment_method: 'transfer',
           reference: '',
-          paid_at: new Date().toISOString().split('T')[0]
+          paid_at: new Date().toISOString().split('T')[0],
+          autoInvoice: false
         })
         refetchDue()
         refetchOverdue()
 
-        // 導航到發票頁面，自動開啟開立發票 Modal
-        navigate(`/invoices?payment_id=${paymentId}`)
+        // 如果沒有選擇自動開票，也不跳轉到發票頁面（使用者可以手動處理）
+        // 如果選擇了自動開票但失敗，跳轉讓用戶手動處理
+        if (!shouldAutoInvoice) {
+          // 只記錄付款，不跳轉
+        }
       }
     } catch (error) {
       // 錯誤由 useBillingRecordPayment 的 onError 處理
@@ -973,16 +1023,42 @@ export default function Payments() {
             <button
               onClick={() => setShowPayModal(false)}
               className="btn-secondary"
+              disabled={recordPayment.isPending || invoiceLoading}
             >
               取消
             </button>
             <button
+              onClick={() => {
+                // 手動開票按鈕：記錄付款後跳轉到發票頁面
+                setPaymentForm({ ...paymentForm, autoInvoice: false })
+                handleRecordPayment().then(() => {
+                  if (selectedPayment) {
+                    navigate(`/invoices?payment_id=${selectedPayment.id}`)
+                  }
+                })
+              }}
+              disabled={recordPayment.isPending || invoiceLoading}
+              className="btn-secondary text-primary-600 border-primary-200 hover:bg-primary-50"
+            >
+              <DollarSign className="w-4 h-4 mr-1" />
+              收款後手動開票
+            </button>
+            <button
               onClick={handleRecordPayment}
-              disabled={recordPayment.isPending}
+              disabled={recordPayment.isPending || invoiceLoading}
               className="btn-success"
             >
-              <CheckCircle className="w-4 h-4 mr-2" />
-              {recordPayment.isPending ? '處理中...' : '確認收款'}
+              {recordPayment.isPending || invoiceLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  {invoiceLoading ? '開票中...' : '處理中...'}
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  {paymentForm.autoInvoice ? '收款並開票' : '確認收款'}
+                </>
+              )}
             </button>
           </>
         }
@@ -1045,6 +1121,28 @@ export default function Payments() {
                 placeholder="選填"
                 className="input"
               />
+            </div>
+
+            {/* 自動開票選項 */}
+            <div className="pt-2 border-t border-gray-200">
+              <label className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-2 rounded-lg -mx-2">
+                <input
+                  type="checkbox"
+                  checked={paymentForm.autoInvoice}
+                  onChange={(e) =>
+                    setPaymentForm({ ...paymentForm, autoInvoice: e.target.checked })
+                  }
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700">付款後自動開票</span>
+                  <p className="text-xs text-gray-500">
+                    {selectedPayment?.company_tax_id || selectedPayment?.tax_id
+                      ? `使用統編 ${selectedPayment.company_tax_id || selectedPayment.tax_id} 開立三聯式發票`
+                      : '開立二聯式發票（無統編）'}
+                  </p>
+                </div>
+              </label>
             </div>
           </div>
         )}
