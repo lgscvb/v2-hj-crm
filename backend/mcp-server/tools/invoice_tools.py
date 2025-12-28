@@ -171,8 +171,8 @@ async def invoice_create(
             {
                 "Description": "共享空間租賃服務",
                 "Quantity": "1",
-                "UnitPrice": str(sales_amount),
-                "Amount": str(sales_amount),
+                "UnitPrice": str(total_amount),   # 含稅單價
+                "Amount": str(total_amount),       # 含稅金額（光貿會自動拆算）
                 "Remark": "",
                 "TaxType": "1"  # 1=應稅
             }
