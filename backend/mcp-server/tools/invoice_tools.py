@@ -151,12 +151,25 @@ async def invoice_create(
     timestamp = int(time.time())
     order_id = f"P{payment_id}_{timestamp}"  # 訂單編號不可重複
 
-    # 計算稅額（5%營業稅）
-    # 光貿 API 計算邏輯：對含稅商品，Amount 放含稅金額
-    # SalesAmount = Round(含稅加總 / 1.05)，TaxAmount = 含稅 - SalesAmount
+    # 計算稅額（5%營業稅）- 依照光貿 API 文件
+    # DetailVat 預設為 1（含稅價），ProductItem.Amount 放含稅金額
+    #
+    # 二聯式（不打統編）：TaxAmount = 0，SalesAmount = 含稅金額
+    # 三聯式（打統編）：TaxAmount = SalesAmount - Round(SalesAmount / 1.05)
+    #                  SalesAmount = SalesAmount - TaxAmount（調整為未稅）
     total_amount = int(amount)
-    sales_amount = round(total_amount / 1.05)  # 未稅金額（四捨五入）
-    tax_amount = total_amount - sales_amount   # 稅額 = 含稅 - 未稅
+
+    # 判斷是否為三聯式（有有效統編）
+    has_valid_tax_id = buyer_tax_id and buyer_tax_id not in ("", "0000000000")
+
+    if has_valid_tax_id:
+        # 三聯式：需要分拆稅額
+        tax_amount = total_amount - round(total_amount / 1.05)
+        sales_amount = total_amount - tax_amount
+    else:
+        # 二聯式：不分拆稅額
+        sales_amount = total_amount
+        tax_amount = 0
 
     # 發票資料結構
     invoice_data = {
@@ -171,8 +184,8 @@ async def invoice_create(
             {
                 "Description": "共享空間租賃服務",
                 "Quantity": "1",
-                "UnitPrice": str(sales_amount),   # 未稅單價
-                "Amount": str(sales_amount),       # 未稅金額
+                "UnitPrice": str(total_amount),   # 含稅單價（DetailVat 預設=1）
+                "Amount": str(total_amount),       # 含稅金額
                 "Remark": "",
                 "TaxType": "1"  # 1=應稅
             }
