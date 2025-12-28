@@ -34,6 +34,7 @@ const PROCESS_CONFIG = {
     label: '續約',
     view: 'v_contract_workspace',
     filter: { decision_blocked_by: 'not.is.null' },
+    order: 'days_until_expiry.asc',  // 續約視圖沒有 decision_priority
     color: 'blue',
     linkPrefix: '/contracts'
   },
@@ -42,6 +43,7 @@ const PROCESS_CONFIG = {
     label: '付款',
     view: 'v_payment_queue',
     filter: {},
+    order: 'decision_priority.asc,is_overdue.desc',
     color: 'green',
     linkPrefix: '/payments'
   },
@@ -50,6 +52,7 @@ const PROCESS_CONFIG = {
     label: '發票',
     view: 'v_invoice_queue',
     filter: {},
+    order: 'decision_priority.asc,is_overdue.desc',
     color: 'purple',
     linkPrefix: '/invoices'
   },
@@ -58,6 +61,7 @@ const PROCESS_CONFIG = {
     label: '佣金',
     view: 'v_commission_queue',
     filter: {},
+    order: 'decision_priority.asc,is_overdue.desc',
     color: 'orange',
     linkPrefix: '/commissions'
   }
@@ -84,7 +88,7 @@ function ProcessListView({ onItemClick }) {
           try {
             const items = await db.query(config.view, {
               ...config.filter,
-              order: 'decision_priority.asc,is_overdue.desc',
+              order: config.order || 'created_at.desc',
               limit: 50
             })
             return (items || []).map(item => ({

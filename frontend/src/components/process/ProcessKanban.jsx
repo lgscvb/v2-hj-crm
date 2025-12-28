@@ -33,6 +33,7 @@ const PROCESS_CONFIG = {
     label: '續約流程',
     view: 'v_contract_workspace',
     filter: { decision_blocked_by: 'not.is.null' },
+    order: 'days_until_expiry.asc',  // 續約視圖沒有 decision_priority
     color: 'blue'
   },
   payment: {
@@ -40,6 +41,7 @@ const PROCESS_CONFIG = {
     label: '付款流程',
     view: 'v_payment_queue',
     filter: {},
+    order: 'decision_priority.asc,is_overdue.desc',
     color: 'green'
   },
   invoice: {
@@ -47,6 +49,7 @@ const PROCESS_CONFIG = {
     label: '發票流程',
     view: 'v_invoice_queue',
     filter: {},
+    order: 'decision_priority.asc,is_overdue.desc',
     color: 'purple'
   },
   commission: {
@@ -54,6 +57,7 @@ const PROCESS_CONFIG = {
     label: '佣金流程',
     view: 'v_commission_queue',
     filter: {},
+    order: 'decision_priority.asc,is_overdue.desc',
     color: 'orange'
   },
   termination: {
@@ -61,6 +65,7 @@ const PROCESS_CONFIG = {
     label: '解約流程',
     view: 'v_termination_workspace',
     filter: { status: 'neq.completed' },
+    order: 'created_at.desc',  // 解約視圖沒有 decision_priority
     color: 'red'
   }
 }
@@ -85,7 +90,7 @@ function ProcessColumn({ processKey, config, onItemClick, maxItems = 5 }) {
     queryFn: async () => {
       const params = {
         ...config.filter,
-        order: 'decision_priority.asc,is_overdue.desc',
+        order: config.order || 'created_at.desc',
         limit: maxItems + 1  // 多取一筆判斷是否有更多
       }
       return db.query(config.view, params)
