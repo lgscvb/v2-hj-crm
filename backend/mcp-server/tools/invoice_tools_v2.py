@@ -167,10 +167,23 @@ async def invoice_create_v2(
     order_id = f"P{payment_id}_{timestamp}"  # 唯一訂單編號
 
     total_amount = int(amount)
-    # 光貿 API 計算邏輯：對含稅商品，Amount 放含稅金額
-    # SalesAmount = Round(含稅加總 / 1.05)，TaxAmount = 含稅 - SalesAmount
-    sales_amount = round(total_amount / 1.05)  # 用 round 不是 floor
-    tax_amount = total_amount - sales_amount
+
+    # 計算稅額（5%營業稅）- 依照光貿 API 文件
+    # DetailVat 預設為 1（含稅價），ProductItem.Amount 放含稅金額
+    #
+    # 二聯式（不打統編）：TaxAmount = 0，SalesAmount = 含稅金額
+    # 三聯式（打統編）：TaxAmount = SalesAmount - Round(SalesAmount / 1.05)
+    #                  SalesAmount = SalesAmount - TaxAmount（調整為未稅）
+    has_valid_tax_id = buyer_tax_id and buyer_tax_id not in ("", "0000000000")
+
+    if has_valid_tax_id:
+        # 三聯式：需要分拆稅額
+        tax_amount = total_amount - round(total_amount / 1.05)
+        sales_amount = total_amount - tax_amount
+    else:
+        # 二聯式：不分拆稅額
+        sales_amount = total_amount
+        tax_amount = 0
 
     invoice_data = {
         "OrderId": order_id,
@@ -180,6 +193,11 @@ async def invoice_create_v2(
         "BuyerTelephoneNumber": "",
         "BuyerEmailAddress": "",
         "MainRemark": f"Hour Jungle 繳費單 #{payment_id}",
+        # 載具欄位預設空值（光貿 API 必填）
+        "CarrierType": "",
+        "CarrierId1": "",
+        "CarrierId2": "",
+        "NPOBAN": "",
         "ProductItem": [{
             "Description": "共享空間租賃服務",
             "Quantity": "1",
