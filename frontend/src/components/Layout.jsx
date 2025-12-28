@@ -2,6 +2,7 @@ import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import {
   LayoutDashboard,
+  LayoutGrid,
   Users,
   FileText,
   CreditCard,
@@ -34,6 +35,7 @@ import Notifications from './Notifications'
 
 const navigation = [
   { name: '儀表板', href: '/dashboard', icon: LayoutDashboard },
+  { name: '流程看板', href: '/process-dashboard', icon: LayoutGrid },
   { name: '報價單', href: '/quotes', icon: FileSignature },
   { name: '合約管理', href: '/contracts', icon: FileText },
   { name: '繳費管理', href: '/payments', icon: CreditCard },

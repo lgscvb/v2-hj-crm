@@ -22,6 +22,7 @@ export { default as DecisionPanel } from './DecisionPanel'
 export { default as ProcessCard } from './ProcessCard'
 export { default as ProcessTimeline } from './ProcessTimeline'
 export { default as ProcessWorkspace } from './ProcessWorkspace'
+export { default as ProcessKanban } from './ProcessKanban'
 
 // Action 執行器
 export { executeAction, hasAction, getAvailableActions } from './ActionDispatcher'

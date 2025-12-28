@@ -29,6 +29,7 @@ import ContractCreate from './pages/ContractCreate'
 import ContractWorkspace from './pages/ContractWorkspace'
 import ServicePlans from './pages/ServicePlans'
 import Terminations from './pages/Terminations'
+import ProcessDashboard from './pages/ProcessDashboard'
 
 function App() {
   return (
@@ -53,6 +54,7 @@ function App() {
         <Route path="invoices" element={<Invoices />} />
         <Route path="renewals" element={<Renewals />} />
         <Route path="terminations" element={<Terminations />} />
+        <Route path="process-dashboard" element={<ProcessDashboard />} />
         <Route path="commissions" element={<Commissions />} />
         <Route path="reports" element={<Reports />} />
         <Route path="quotes" element={<Quotes />} />
