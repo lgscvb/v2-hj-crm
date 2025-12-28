@@ -31,9 +31,9 @@ const PROCESS_CONFIG = {
   renewal: {
     key: 'renewal',
     label: '續約流程',
-    view: 'v_contract_workspace',
-    filter: { decision_blocked_by: 'not.is.null' },
-    order: 'days_until_expiry.asc',  // 續約視圖沒有 decision_priority
+    view: 'v_renewal_queue',  // 使用新的 queue 視圖（含 decision_priority）
+    filter: {},
+    order: 'decision_priority.asc,days_until_expiry.asc',
     color: 'blue'
   },
   payment: {
@@ -63,9 +63,9 @@ const PROCESS_CONFIG = {
   termination: {
     key: 'termination',
     label: '解約流程',
-    view: 'v_termination_workspace',
-    filter: { status: 'not.in.(completed,cancelled)' },  // 排除已完成和已取消
-    order: 'created_at.desc',  // 解約視圖沒有 decision_priority
+    view: 'v_termination_queue',  // 使用新的 queue 視圖（含 decision_priority）
+    filter: {},
+    order: 'decision_priority.asc,expected_end_date.asc',
     color: 'red'
   }
 }

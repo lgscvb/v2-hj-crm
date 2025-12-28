@@ -32,9 +32,9 @@ const PROCESS_CONFIG = {
   renewal: {
     key: 'renewal',
     label: '續約',
-    view: 'v_contract_workspace',
-    filter: { decision_blocked_by: 'not.is.null' },
-    order: 'days_until_expiry.asc',  // 續約視圖沒有 decision_priority
+    view: 'v_renewal_queue',  // 使用新的 queue 視圖（含 decision_priority）
+    filter: {},
+    order: 'decision_priority.asc,days_until_expiry.asc',
     color: 'blue',
     linkPrefix: '/contracts'
   },
