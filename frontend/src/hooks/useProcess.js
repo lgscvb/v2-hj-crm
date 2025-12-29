@@ -45,7 +45,7 @@ export function useProcessWorkspace(processKey, entityId, options = {}) {
     signing: 'contract_id',
     termination: 'id',
     payment: 'payment_id',
-    invoice: 'invoice_id',
+    invoice: 'payment_id',  // v_invoice_workspace 使用 payment_id
     commission: 'commission_id'
   }
 

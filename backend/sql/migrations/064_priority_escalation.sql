@@ -249,7 +249,7 @@ BEGIN
             ) AS escalated_priority
         FROM v_invoice_workspace iw
         WHERE iw.decision_blocked_by IS NOT NULL
-          AND iw.invoice_status != ''issued''
+          AND (iw.invoice_status IS NULL OR iw.invoice_status != ''issued'')
         ORDER BY
             CASE calculate_escalated_priority(iw.decision_priority, COALESCE(iw.days_since_paid, 0))
                 WHEN ''urgent'' THEN 1

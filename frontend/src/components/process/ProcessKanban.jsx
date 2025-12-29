@@ -27,13 +27,13 @@ import { PROCESS_ICONS, PRIORITY_COLORS } from './index'
 import ProcessCard from './ProcessCard'
 
 // 流程配置
+// 注意：不設定 order 參數，讓 SQL 視圖的 ORDER BY 生效（CASE 排序：urgent→high→medium→low）
 const PROCESS_CONFIG = {
   renewal: {
     key: 'renewal',
     label: '續約流程',
-    view: 'v_renewal_queue',  // 使用新的 queue 視圖（含 decision_priority）
+    view: 'v_renewal_queue',
     filter: {},
-    order: 'decision_priority.asc,days_until_expiry.asc',
     color: 'blue'
   },
   payment: {
@@ -41,7 +41,6 @@ const PROCESS_CONFIG = {
     label: '付款流程',
     view: 'v_payment_queue',
     filter: {},
-    order: 'decision_priority.asc,is_overdue.desc',
     color: 'green'
   },
   invoice: {
@@ -49,7 +48,6 @@ const PROCESS_CONFIG = {
     label: '發票流程',
     view: 'v_invoice_queue',
     filter: {},
-    order: 'decision_priority.asc,is_overdue.desc',
     color: 'purple'
   },
   commission: {
@@ -57,15 +55,13 @@ const PROCESS_CONFIG = {
     label: '佣金流程',
     view: 'v_commission_queue',
     filter: {},
-    order: 'decision_priority.asc,is_overdue.desc',
     color: 'orange'
   },
   termination: {
     key: 'termination',
     label: '解約流程',
-    view: 'v_termination_queue',  // 使用新的 queue 視圖（含 decision_priority）
+    view: 'v_termination_queue',
     filter: {},
-    order: 'decision_priority.asc,expected_end_date.asc',
     color: 'red'
   }
 }
@@ -90,8 +86,11 @@ function ProcessColumn({ processKey, config, onItemClick, maxItems = 5 }) {
     queryFn: async () => {
       const params = {
         ...config.filter,
-        order: config.order || 'created_at.desc',
         limit: maxItems + 1  // 多取一筆判斷是否有更多
+      }
+      // 如果有指定 order 才加入，否則讓 SQL 視圖的 ORDER BY 生效
+      if (config.order) {
+        params.order = config.order
       }
       return db.query(config.view, params)
     },
@@ -176,7 +175,8 @@ function ProcessColumn({ processKey, config, onItemClick, maxItems = 5 }) {
                   decision_blocked_by: item.decision_blocked_by,
                   decision_next_action: item.decision_next_action,
                   decision_owner: item.decision_owner,
-                  decision_priority: item.decision_priority,
+                  // 優先使用升級後的優先級
+                  decision_priority: item.escalated_priority || item.decision_priority,
                   is_overdue: item.is_overdue,
                   overdue_days: item.overdue_days || item.actual_overdue_days,
                   due_date: item.due_date || item.decision_due_date,

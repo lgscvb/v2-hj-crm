@@ -108,9 +108,8 @@ const getActionHandler = (processKey, actionKey) => {
     payment: {
       // 發送催繳通知
       SEND_REMINDER: async (paymentId, payload) => {
-        return callTool('send_payment_reminder', {
-          payment_id: paymentId,
-          channel: payload.channel || 'line'
+        return callTool('billing_send_reminder', {
+          payment_id: paymentId
         })
       },
 
@@ -159,6 +158,17 @@ const getActionHandler = (processKey, actionKey) => {
           payment_id: paymentId,
           reason: payload.reason
         })
+      },
+
+      // 更新客戶資料（缺統編時需導航到客戶編輯頁面）
+      // 這是 UI 導航行動，不呼叫 MCP tool
+      UPDATE_CUSTOMER: async (paymentId, payload) => {
+        return {
+          success: true,
+          action: 'navigate',
+          url: `/customers/${payload.customerId}/edit`,
+          message: '請前往客戶頁面補齊統一編號'
+        }
       }
     },
 
@@ -266,7 +276,7 @@ export const getAvailableActions = (processKey) => {
   const actionMap = {
     renewal: ['CREATE_DRAFT', 'SEND_FOR_SIGN', 'MARK_SIGNED', 'ACTIVATE', 'SET_CONFIRMED', 'SET_NOTIFIED', 'SEND_SIGN_REMINDER'],
     payment: ['SEND_REMINDER', 'RECORD_PAYMENT', 'REQUEST_WAIVE', 'UNDO_PAYMENT'],
-    invoice: ['ISSUE_INVOICE', 'VOID_INVOICE'],    // TODO: UPDATE_CUSTOMER
+    invoice: ['ISSUE_INVOICE', 'VOID_INVOICE', 'UPDATE_CUSTOMER'],
     termination: ['UPDATE_CHECKLIST', 'UPDATE_STATUS'],
     signing: ['GENERATE_PDF', 'SEND_FOR_SIGN', 'MARK_SIGNED', 'SEND_SIGN_REMINDER'],
     commission: ['PAY_COMMISSION', 'MARK_ELIGIBLE', 'CANCEL_COMMISSION']

@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import DataTable from '../components/DataTable'
 import Modal from '../components/Modal'
 import Badge from '../components/Badge'
+import { ProcessTimeline } from '../components/process'
 import {
   Bell,
   Calendar,
@@ -56,8 +57,8 @@ function computeFlags(contract) {
     is_notified: !!contract.renewal_notified_at,
     is_confirmed: !!contract.renewal_confirmed_at,
     // 唯讀：從 payment/invoice 計算（SSOT）
-    // 優先使用新欄位，fallback 到舊欄位（向後相容）
-    is_paid: contract.is_first_payment_paid ?? !!contract.renewal_paid_at,
+    // 使用 || 確保 false 也會 fallback 到 renewal_paid_at
+    is_paid: contract.is_first_payment_paid || !!contract.renewal_paid_at,
     is_invoiced: contract.invoice_status && contract.invoice_status !== 'pending_tax_id'
     // is_signed 已移除，簽約狀態改由待簽列表追蹤
   }
@@ -94,6 +95,66 @@ function getDisplayStatus(contract) {
     issues,
     progress: 4 - issues.length
   }
+}
+
+// 建構 ProcessTimeline 步驟（用於續約進度 Modal）
+function buildRenewalTimelineSteps(contract) {
+  if (!contract) return []
+
+  const flags = computeFlags(contract)
+
+  return [
+    {
+      key: 'notify',
+      label: '通知客戶',
+      status: flags.is_notified ? 'done' : 'not_started',
+      details: flags.is_notified ? {
+        completed_at: contract.renewal_notified_at
+      } : null
+    },
+    {
+      key: 'confirm',
+      label: '確認續約意願',
+      status: flags.is_confirmed ? 'done' :
+        (flags.is_notified ? 'pending' : 'not_started'),
+      details: flags.is_confirmed ? {
+        completed_at: contract.renewal_confirmed_at
+      } : null
+    },
+    {
+      key: 'payment',
+      label: '款項收取',
+      status: flags.is_paid ? 'done' :
+        (flags.is_confirmed ? 'pending' : 'not_started'),
+      details: flags.is_paid ? {
+        completed_at: contract.renewal_paid_at || contract.first_payment_paid_at,
+        note: contract.first_payment_method || null
+      } : null
+    },
+    {
+      key: 'invoice',
+      label: '發票開立',
+      status: flags.is_invoiced ? 'done' :
+        (flags.is_paid ? 'pending' : 'not_started'),
+      details: flags.is_invoiced ? {
+        completed_at: contract.invoice_date,
+        note: contract.invoice_number || null
+      } : (contract.invoice_status === 'pending_tax_id' ? {
+        note: '等待客戶提供統編'
+      } : null)
+    }
+  ]
+}
+
+// 取得目前處理到的步驟（用於 Timeline currentStep）
+function getCurrentTimelineStep(contract) {
+  const flags = computeFlags(contract)
+
+  if (!flags.is_notified) return 'notify'
+  if (!flags.is_confirmed) return 'confirm'
+  if (!flags.is_paid) return 'payment'
+  if (!flags.is_invoiced) return 'invoice'
+  return null  // 全部完成
 }
 
 // 發票狀態定義
@@ -1273,41 +1334,14 @@ export default function Renewals() {
               </p>
             </div>
 
-            {/* 時間軸 */}
-            {(selectedContract.renewal_notified_at ||
-              selectedContract.renewal_confirmed_at ||
-              selectedContract.renewal_paid_at ||
-              selectedContract.renewal_signed_at) && (
-              <div>
-                <h4 className="font-medium mb-3">處理記錄</h4>
-                <div className="space-y-2 text-sm">
-                  {selectedContract.renewal_notified_at && (
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Bell className="w-4 h-4 text-blue-500" />
-                      <span>通知：{new Date(selectedContract.renewal_notified_at).toLocaleString('zh-TW')}</span>
-                    </div>
-                  )}
-                  {selectedContract.renewal_confirmed_at && (
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <CheckCircle className="w-4 h-4 text-purple-500" />
-                      <span>確認：{new Date(selectedContract.renewal_confirmed_at).toLocaleString('zh-TW')}</span>
-                    </div>
-                  )}
-                  {selectedContract.renewal_paid_at && (
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Receipt className="w-4 h-4 text-green-500" />
-                      <span>收款：{new Date(selectedContract.renewal_paid_at).toLocaleString('zh-TW')}</span>
-                    </div>
-                  )}
-                  {selectedContract.renewal_signed_at && (
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <PenTool className="w-4 h-4 text-orange-500" />
-                      <span>簽約：{new Date(selectedContract.renewal_signed_at).toLocaleString('zh-TW')}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            {/* 續約流程時間軸 */}
+            <div>
+              <h4 className="font-medium mb-3">續約流程進度</h4>
+              <ProcessTimeline
+                steps={buildRenewalTimelineSteps(selectedContract)}
+                currentStep={getCurrentTimelineStep(selectedContract)}
+              />
+            </div>
           </div>
         )}
       </Modal>

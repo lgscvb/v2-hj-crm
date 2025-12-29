@@ -122,7 +122,7 @@ SELECT
         THEN 'need_issue_invoice'
 
         -- 優先序 4：作廢待重開
-        WHEN p.invoice_status = 'void'
+        WHEN p.invoice_status = 'voided'
         THEN 'need_reissue'
 
         ELSE NULL
@@ -145,7 +145,7 @@ SELECT
         WHEN p.payment_status = 'paid'
          AND (p.invoice_status IS NULL OR p.invoice_status = 'pending')
         THEN '開立發票'
-        WHEN p.invoice_status = 'void'
+        WHEN p.invoice_status = 'voided'
         THEN '重新開立發票'
         ELSE NULL
     END AS decision_next_action,
@@ -163,7 +163,7 @@ SELECT
         WHEN p.payment_status = 'paid'
          AND (p.invoice_status IS NULL OR p.invoice_status = 'pending')
         THEN 'ISSUE_INVOICE'
-        WHEN p.invoice_status = 'void'
+        WHEN p.invoice_status = 'voided'
         THEN 'ISSUE_INVOICE'
         ELSE NULL
     END AS decision_action_key,
@@ -196,7 +196,7 @@ SELECT
         WHEN p.payment_status = 'paid'
          AND (p.invoice_status IS NULL OR p.invoice_status = 'pending')
         THEN 'medium'
-        WHEN p.invoice_status = 'void'
+        WHEN p.invoice_status = 'voided'
         THEN 'medium'
         ELSE NULL
     END AS decision_priority,
