@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useContractDetail, useBillingRecordPayment, useSendPaymentReminder, useUpdateCustomer } from '../hooks/useApi'
-import { crm } from '../services/api'
+import api, { crm } from '../services/api'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { pdf } from '@react-pdf/renderer'
 import Modal from '../components/Modal'
@@ -554,15 +554,7 @@ export default function ContractDetail() {
   // 更新合約 mutation
   const updateContract = useMutation({
     mutationFn: async ({ contractId, data }) => {
-      const response = await fetch(`/api/db/contracts?id=eq.${contractId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      })
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.message || '更新失敗')
-      }
+      await api.patch(`/api/db/contracts?id=eq.${contractId}`, data)
       return { success: true }
     },
     onSuccess: () => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { pdf } from '@react-pdf/renderer'
+import api from '../services/api'
 import QuotePDF from '../components/pdf/QuotePDF'
 
 // 格式化金額
@@ -23,18 +24,14 @@ export default function QuotePublic() {
   const fetchQuote = async () => {
     try {
       setLoading(true)
-      // 直接查詢 PostgREST（不需要認證）
-      const response = await fetch(`/api/db/v_quotes?quote_number=eq.${quoteNumber}`)
-      if (!response.ok) {
-        throw new Error('無法載入報價單')
-      }
-      const data = await response.json()
-      if (data.length === 0) {
+      // 查詢 PostgREST（使用 api 服務確保正確 baseURL）
+      const data = await api.get(`/api/db/v_quotes?quote_number=eq.${quoteNumber}`)
+      if (!data || data.length === 0) {
         throw new Error('找不到此報價單')
       }
       setQuote(data[0])
     } catch (err) {
-      setError(err.message)
+      setError(err.message || '無法載入報價單')
     } finally {
       setLoading(false)
     }

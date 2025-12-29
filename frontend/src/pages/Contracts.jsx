@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useContracts, useCustomers, usePendingSignContracts } from '../hooks/useApi'
-import { crm, callTool } from '../services/api'
+import api, { crm, callTool } from '../services/api'
 import useStore from '../store/useStore'
 import DataTable from '../components/DataTable'
 import Modal from '../components/Modal'
@@ -194,36 +194,16 @@ export default function Contracts() {
   const deleteContract = useMutation({
     mutationFn: async (contractId) => {
       // 1. 先清除報價單的 converted_contract_id 外鍵關聯
-      const clearQuotesResponse = await fetch(`/api/db/quotes?converted_contract_id=eq.${contractId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          converted_contract_id: null,
-          status: 'accepted'  // 將狀態改回已接受，因為合約被刪除了
-        })
+      await api.patch(`/api/db/quotes?converted_contract_id=eq.${contractId}`, {
+        converted_contract_id: null,
+        status: 'accepted'  // 將狀態改回已接受，因為合約被刪除了
       })
-      if (!clearQuotesResponse.ok) {
-        const errorData = await clearQuotesResponse.json().catch(() => ({}))
-        throw new Error(errorData.message || '清除報價單關聯失敗')
-      }
 
       // 2. 刪除相關的付款記錄
-      const deletePaymentsResponse = await fetch(`/api/db/payments?contract_id=eq.${contractId}`, {
-        method: 'DELETE'
-      })
-      if (!deletePaymentsResponse.ok) {
-        const errorData = await deletePaymentsResponse.json().catch(() => ({}))
-        throw new Error(errorData.message || '刪除付款記錄失敗')
-      }
+      await api.delete(`/api/db/payments?contract_id=eq.${contractId}`)
 
       // 3. 刪除合約
-      const response = await fetch(`/api/db/contracts?id=eq.${contractId}`, {
-        method: 'DELETE'
-      })
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.message || '刪除合約失敗')
-      }
+      await api.delete(`/api/db/contracts?id=eq.${contractId}`)
       return { success: true }
     },
     onSuccess: () => {
@@ -246,17 +226,7 @@ export default function Contracts() {
         updateData.notes = `終止原因：${reason.trim()}`
       }
 
-      const response = await fetch(`/api/db/contracts?id=eq.${contractId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updateData)
-      })
-
-      if (!response.ok) {
-        // 嘗試取得錯誤詳情
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.message || errorData.details || `終止失敗 (${response.status})`)
-      }
+      await api.patch(`/api/db/contracts?id=eq.${contractId}`, updateData)
       return { success: true }
     },
     onSuccess: () => {
@@ -274,14 +244,7 @@ export default function Contracts() {
   // 更新合約 mutation
   const updateContract = useMutation({
     mutationFn: async ({ contractId, data }) => {
-      const response = await fetch(`/api/db/contracts?id=eq.${contractId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      })
-      if (!response.ok) {
-        throw new Error('更新失敗')
-      }
+      await api.patch(`/api/db/contracts?id=eq.${contractId}`, data)
       return { success: true }
     },
     onSuccess: () => {
