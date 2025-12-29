@@ -54,13 +54,13 @@ BEGIN
         updated_at = NOW()
     WHERE id = p_contract_id;
 
-    -- 4. 取消所有待繳款項
+    -- 4. 取消所有待繳款項（欄位名稱是 payment_status）
     UPDATE payments
-    SET status = 'cancelled',
+    SET payment_status = 'cancelled',
         notes = COALESCE(notes, '') || E'\n因快速終止合約而取消',
         updated_at = NOW()
     WHERE contract_id = p_contract_id
-      AND status = 'pending';
+      AND payment_status = 'pending';
 
     GET DIAGNOSTICS v_cancelled_payments = ROW_COUNT;
 
