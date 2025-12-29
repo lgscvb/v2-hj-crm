@@ -220,18 +220,23 @@ export default function Contracts() {
   // 終止合約（移動到已結束）mutation
   const terminateContract = useMutation({
     mutationFn: async ({ contractId, reason }) => {
-      // 準備更新資料（只更新狀態，reason 有值才更新 notes）
-      const updateData = { status: 'terminated' }
-      if (reason && reason.trim()) {
-        updateData.notes = `終止原因：${reason.trim()}`
-      }
+      // 使用 RPC 函數繞過 Trigger 保護
+      const response = await api.post('/api/db/rpc/quick_terminate_contract', {
+        p_contract_id: contractId,
+        p_reason: reason || null,
+        p_operator: 'user'
+      })
 
-      await api.patch(`/api/db/contracts?id=eq.${contractId}`, updateData)
-      return { success: true }
+      // RPC 回傳的是 JSONB 物件
+      const result = response.data
+      if (!result.success) {
+        throw new Error(result.error || '終止失敗')
+      }
+      return result
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['contracts'] })
-      addNotification({ type: 'success', message: '合約已移動到已結束' })
+      addNotification({ type: 'success', message: data.message || '合約已移動到已結束' })
       setShowTerminateModal(false)
       setSelectedContract(null)
       setTerminateReason('')
