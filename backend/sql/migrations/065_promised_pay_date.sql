@@ -40,7 +40,7 @@ SELECT
     p.due_date,
     p.paid_at,
     p.payment_method,
-    p.payment_reference,
+    p.notes AS payment_notes,
 
     -- 發票資訊
     p.invoice_number,
