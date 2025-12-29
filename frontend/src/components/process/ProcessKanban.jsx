@@ -100,9 +100,9 @@ function ProcessColumn({ processKey, config, onItemClick, maxItems = 5 }) {
   const hasMore = items?.length > maxItems
   const displayItems = items?.slice(0, maxItems) || []
 
-  // 統計
-  const urgentCount = displayItems.filter(i => i.decision_priority === 'urgent').length
-  const highCount = displayItems.filter(i => i.decision_priority === 'high').length
+  // 統計（優先使用升級後的優先級）
+  const urgentCount = displayItems.filter(i => (i.escalated_priority || i.decision_priority) === 'urgent').length
+  const highCount = displayItems.filter(i => (i.escalated_priority || i.decision_priority) === 'high').length
   const overdueCount = displayItems.filter(i => i.is_overdue).length
 
   return (

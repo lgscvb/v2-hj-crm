@@ -41,8 +41,8 @@ export function useProcessWorkspace(processKey, entityId, options = {}) {
   }
 
   const idFieldMap = {
-    renewal: 'contract_id',
-    signing: 'contract_id',
+    renewal: 'id',      // v_contract_workspace 使用 id（即 contract.id）
+    signing: 'id',      // v_contract_workspace 使用 id
     termination: 'id',
     payment: 'payment_id',
     invoice: 'payment_id',  // v_invoice_workspace 使用 payment_id
@@ -100,10 +100,9 @@ export function useProcessQueue(processKey, filters = {}) {
       }
 
       const params = {
-        // 只取有卡點的項目
-        decision_blocked_by: 'not.is.null',
-        // 排除已完成
-        'decision_blocked_by': 'neq.completed',
+        // 只取有卡點且非 completed 的項目
+        // 使用 and 語法避免重複 key 覆蓋
+        and: '(decision_blocked_by.not.is.null,decision_blocked_by.neq.completed)',
         // 按優先級和逾期排序
         order: 'is_overdue.desc,decision_priority.asc,due_date.asc',
         ...filters
