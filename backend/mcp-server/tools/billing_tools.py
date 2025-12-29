@@ -767,3 +767,157 @@ async def billing_batch_remind(
         "failed_count": failed_count,
         "query_url": f"/api/db/batch_tasks?id=eq.{task_id}&select=*,items:batch_task_items(*)"
     }
+
+
+async def billing_set_promise(
+    payment_id: int,
+    promised_pay_date: str,
+    notes: str = None
+) -> Dict[str, Any]:
+    """
+    設定客戶承諾付款日期
+
+    Args:
+        payment_id: 付款ID
+        promised_pay_date: 承諾付款日期 (YYYY-MM-DD)
+        notes: 備註（可選）
+
+    Returns:
+        更新結果
+    """
+    # 驗證日期格式
+    try:
+        promise_date = datetime.strptime(promised_pay_date, "%Y-%m-%d").date()
+    except ValueError:
+        return {
+            "success": False,
+            "error": "日期格式錯誤，請使用 YYYY-MM-DD 格式",
+            "code": "INVALID_DATE_FORMAT"
+        }
+
+    # 驗證日期不能是過去
+    from datetime import date
+    if promise_date < date.today():
+        return {
+            "success": False,
+            "error": "承諾付款日期不能是過去的日期",
+            "code": "INVALID_DATE"
+        }
+
+    # 1. 取得付款記錄
+    try:
+        payments = await postgrest_get("payments", {"id": f"eq.{payment_id}"})
+        if not payments:
+            return {"success": False, "error": "找不到付款記錄", "code": "NOT_FOUND"}
+
+        payment = payments[0]
+    except Exception as e:
+        logger.error(f"billing_set_promise - 取得付款記錄失敗: {e}")
+        raise
+
+    # 2. 驗證狀態（只有待繳款項可以設定承諾日期）
+    if payment.get("payment_status") not in ["pending", "overdue"]:
+        return {
+            "success": False,
+            "error": f"只有待繳款項可設定承諾日期，目前狀態: {payment.get('payment_status')}",
+            "code": "INVALID_STATUS"
+        }
+
+    # 3. 更新付款記錄
+    try:
+        update_data = {
+            "promised_pay_date": promised_pay_date
+        }
+
+        result = await postgrest_patch(
+            "payments",
+            {"id": f"eq.{payment_id}"},
+            update_data
+        )
+
+        updated = result[0] if isinstance(result, list) else result
+
+        # 4. 寫入操作日誌
+        await postgrest_post("payment_logs", {
+            "payment_id": payment_id,
+            "action": "set_promise",
+            "details": {
+                "promised_pay_date": promised_pay_date,
+                "notes": notes
+            }
+        })
+
+        return {
+            "success": True,
+            "message": f"已設定承諾付款日期：{promised_pay_date}",
+            "payment_id": payment_id,
+            "promised_pay_date": promised_pay_date,
+            "customer_name": payment.get("customer_name"),
+            "amount": payment.get("amount")
+        }
+
+    except Exception as e:
+        logger.error(f"billing_set_promise - 更新失敗: {e}")
+        raise
+
+
+async def billing_clear_promise(
+    payment_id: int,
+    reason: str = None
+) -> Dict[str, Any]:
+    """
+    清除客戶承諾付款日期
+
+    Args:
+        payment_id: 付款ID
+        reason: 清除原因（可選）
+
+    Returns:
+        更新結果
+    """
+    # 1. 取得付款記錄
+    try:
+        payments = await postgrest_get("payments", {"id": f"eq.{payment_id}"})
+        if not payments:
+            return {"success": False, "error": "找不到付款記錄", "code": "NOT_FOUND"}
+
+        payment = payments[0]
+    except Exception as e:
+        logger.error(f"billing_clear_promise - 取得付款記錄失敗: {e}")
+        raise
+
+    if not payment.get("promised_pay_date"):
+        return {
+            "success": False,
+            "error": "此付款沒有設定承諾日期",
+            "code": "NO_PROMISE"
+        }
+
+    # 2. 清除承諾日期
+    try:
+        result = await postgrest_patch(
+            "payments",
+            {"id": f"eq.{payment_id}"},
+            {"promised_pay_date": None}
+        )
+
+        # 3. 寫入操作日誌
+        await postgrest_post("payment_logs", {
+            "payment_id": payment_id,
+            "action": "clear_promise",
+            "details": {
+                "previous_date": payment.get("promised_pay_date"),
+                "reason": reason
+            }
+        })
+
+        return {
+            "success": True,
+            "message": "已清除承諾付款日期",
+            "payment_id": payment_id,
+            "previous_date": payment.get("promised_pay_date")
+        }
+
+    except Exception as e:
+        logger.error(f"billing_clear_promise - 更新失敗: {e}")
+        raise

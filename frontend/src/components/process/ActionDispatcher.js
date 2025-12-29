@@ -137,6 +137,23 @@ const getActionHandler = (processKey, actionKey) => {
           payment_id: paymentId,
           reason: payload.reason
         })
+      },
+
+      // 設定承諾付款日期
+      SET_PROMISE: async (paymentId, payload) => {
+        return callTool('billing_set_promise', {
+          payment_id: paymentId,
+          promised_pay_date: payload.promised_pay_date,
+          notes: payload.notes
+        })
+      },
+
+      // 清除承諾付款日期
+      CLEAR_PROMISE: async (paymentId, payload) => {
+        return callTool('billing_clear_promise', {
+          payment_id: paymentId,
+          reason: payload.reason
+        })
       }
     },
 
@@ -275,7 +292,7 @@ export const hasAction = (processKey, actionKey) => {
 export const getAvailableActions = (processKey) => {
   const actionMap = {
     renewal: ['CREATE_DRAFT', 'SEND_FOR_SIGN', 'MARK_SIGNED', 'ACTIVATE', 'SET_CONFIRMED', 'SET_NOTIFIED', 'SEND_SIGN_REMINDER'],
-    payment: ['SEND_REMINDER', 'RECORD_PAYMENT', 'REQUEST_WAIVE', 'UNDO_PAYMENT'],
+    payment: ['SEND_REMINDER', 'RECORD_PAYMENT', 'REQUEST_WAIVE', 'UNDO_PAYMENT', 'SET_PROMISE', 'CLEAR_PROMISE'],
     invoice: ['ISSUE_INVOICE', 'VOID_INVOICE', 'UPDATE_CUSTOMER'],
     termination: ['UPDATE_CHECKLIST', 'UPDATE_STATUS'],
     signing: ['GENERATE_PDF', 'SEND_FOR_SIGN', 'MARK_SIGNED', 'SEND_SIGN_REMINDER'],

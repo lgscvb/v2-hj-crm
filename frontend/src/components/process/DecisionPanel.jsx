@@ -54,6 +54,8 @@ const BLOCKED_LABELS = {
   need_second_reminder: '需再次催繳',
   need_first_reminder: '首次催繳',
   due_soon: '即將到期',
+  waiting_promise: '等待客戶承諾付款日',
+  promise_overdue: '承諾付款日已過期',
 
   // 發票流程
   need_tax_id: '缺少統一編號',

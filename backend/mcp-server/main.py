@@ -242,7 +242,9 @@ from tools.billing_tools import (
     billing_approve_waive,
     billing_reject_waive,
     billing_send_reminder,
-    billing_batch_remind
+    billing_batch_remind,
+    billing_set_promise,
+    billing_clear_promise
 )
 
 # Billing V2 - Transaction 保護（免收核准）
@@ -956,6 +958,23 @@ MCP_TOOLS = {
             "created_by": {"type": "string", "description": "操作者", "optional": True}
         },
         "handler": billing_batch_remind
+    },
+    "billing_set_promise": {
+        "description": "設定客戶承諾付款日期（避免在該日期前自動催繳）",
+        "parameters": {
+            "payment_id": {"type": "integer", "description": "付款ID", "required": True},
+            "promised_pay_date": {"type": "string", "description": "承諾付款日期 (YYYY-MM-DD)", "required": True},
+            "notes": {"type": "string", "description": "備註", "optional": True}
+        },
+        "handler": billing_set_promise
+    },
+    "billing_clear_promise": {
+        "description": "清除客戶承諾付款日期",
+        "parameters": {
+            "payment_id": {"type": "integer", "description": "付款ID", "required": True},
+            "reason": {"type": "string", "description": "清除原因", "optional": True}
+        },
+        "handler": billing_clear_promise
     },
 
     # ==========================================================================
