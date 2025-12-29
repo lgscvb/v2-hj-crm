@@ -221,14 +221,13 @@ export default function Contracts() {
   const terminateContract = useMutation({
     mutationFn: async ({ contractId, reason }) => {
       // 使用 RPC 函數繞過 Trigger 保護
-      const response = await api.post('/api/db/rpc/quick_terminate_contract', {
+      // 注意：api interceptor 已自動解開 response.data
+      const result = await api.post('/api/db/rpc/quick_terminate_contract', {
         p_contract_id: contractId,
         p_reason: reason || null,
         p_operator: 'user'
       })
 
-      // RPC 回傳的是 JSONB 物件
-      const result = response.data
       if (!result.success) {
         throw new Error(result.error || '終止失敗')
       }
