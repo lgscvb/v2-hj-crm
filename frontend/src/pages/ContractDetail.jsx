@@ -65,19 +65,27 @@ const BRANCHES = {
 // ============================================================================
 
 // 從時間戳計算 flags
-function computeFlags(contract) {
+// ★ 2025-12-29 修正：is_paid 改從 payments 判斷，不再使用 deprecated 的 renewal_paid_at
+function computeFlags(contract, payments = []) {
+  // 找出第一筆租金付款是否已付（按 payment_period 排序）
+  const rentPayments = payments.filter(p => p.payment_type === 'rent')
+  const firstRentPayment = rentPayments.sort((a, b) =>
+    (a.payment_period || '').localeCompare(b.payment_period || '')
+  )[0]
+  const isFirstPaymentPaid = firstRentPayment?.payment_status === 'paid'
+
   return {
     is_notified: !!contract.renewal_notified_at,
     is_confirmed: !!contract.renewal_confirmed_at,
-    is_paid: !!contract.renewal_paid_at,
+    is_paid: isFirstPaymentPaid,  // ★ 改用 payments 數據（SSOT）
     is_signed: !!contract.renewal_signed_at,
     is_invoiced: contract.invoice_status && contract.invoice_status !== 'pending_tax_id'
   }
 }
 
 // 根據 flags 計算顯示狀態
-function getDisplayStatus(contract) {
-  const flags = computeFlags(contract)
+function getDisplayStatus(contract, payments = []) {
+  const flags = computeFlags(contract, payments)
 
   // 檢查是否全部完成
   const allDone = flags.is_notified && flags.is_confirmed &&
@@ -109,8 +117,8 @@ function getDisplayStatus(contract) {
 // Checklist Popover 元件
 // ============================================================================
 
-function ChecklistPopover({ contract, onUpdate, onSaveNotes, isUpdating, onClose }) {
-  const flags = computeFlags(contract)
+function ChecklistPopover({ contract, payments = [], onUpdate, onSaveNotes, isUpdating, onClose }) {
+  const flags = computeFlags(contract, payments)
   const popoverRef = useRef(null)
   const [notes, setNotes] = useState(contract.renewal_notes || '')
   const [notesChanged, setNotesChanged] = useState(false)
@@ -1016,7 +1024,7 @@ export default function ContractDetail() {
                   <span className="text-sm font-medium">續約進度</span>
                 </div>
                 {(() => {
-                  const status = getDisplayStatus(contract)
+                  const status = getDisplayStatus(contract, payments)
                   const stageColors = {
                     pending: 'bg-gray-100 text-gray-600',
                     in_progress: 'bg-blue-100 text-blue-700',
@@ -1037,8 +1045,8 @@ export default function ContractDetail() {
                   className="flex items-center gap-3 w-full p-2 -mx-2 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   <ProgressBar
-                    progress={getDisplayStatus(contract).progress}
-                    stage={getDisplayStatus(contract).stage}
+                    progress={getDisplayStatus(contract, payments).progress}
+                    stage={getDisplayStatus(contract, payments).stage}
                   />
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showChecklistPopover ? 'rotate-180' : ''}`} />
                 </button>
@@ -1047,6 +1055,7 @@ export default function ContractDetail() {
                 {showChecklistPopover && (
                   <ChecklistPopover
                     contract={contract}
+                    payments={payments}
                     onUpdate={handleChecklistUpdate}
                     onSaveNotes={handleSaveNotes}
                     isUpdating={setRenewalFlag.isPending || saveNotes.isPending}

@@ -51,14 +51,15 @@ import {
 // ============================================================================
 
 // 從視圖欄位計算 flags（V3 SSOT 設計）
+// ★ 2025-12-29 修正：is_paid 改用 first_payment_status（SSOT），不再使用 deprecated 的 renewal_paid_at
 function computeFlags(contract) {
   return {
     // 可手動更新的意願管理欄位
     is_notified: !!contract.renewal_notified_at,
     is_confirmed: !!contract.renewal_confirmed_at,
     // 唯讀：從 payment/invoice 計算（SSOT）
-    // 使用 || 確保 false 也會 fallback 到 renewal_paid_at
-    is_paid: contract.is_first_payment_paid || !!contract.renewal_paid_at,
+    // ★ 改用 is_first_payment_paid 或 first_payment_status
+    is_paid: contract.is_first_payment_paid || contract.first_payment_status === 'paid',
     is_invoiced: contract.invoice_status && contract.invoice_status !== 'pending_tax_id'
     // is_signed 已移除，簽約狀態改由待簽列表追蹤
   }
@@ -127,7 +128,8 @@ function buildRenewalTimelineSteps(contract) {
       status: flags.is_paid ? 'done' :
         (flags.is_confirmed ? 'pending' : 'not_started'),
       details: flags.is_paid ? {
-        completed_at: contract.renewal_paid_at || contract.first_payment_paid_at,
+        // ★ 2025-12-29 修正：優先使用 first_payment_paid_at（SSOT）
+        completed_at: contract.first_payment_paid_at,
         note: contract.first_payment_method || null
       } : null
     },

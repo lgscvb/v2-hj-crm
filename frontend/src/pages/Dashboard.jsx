@@ -34,11 +34,13 @@ const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444']
 // 續約 Checklist 相關：從時間戳計算狀態
 // ============================================================================
 
+// ★ 2025-12-29 修正：is_paid 改用 first_payment_status（SSOT）
 function computeFlags(contract) {
   return {
     is_notified: !!contract.renewal_notified_at,
     is_confirmed: !!contract.renewal_confirmed_at,
-    is_paid: !!contract.renewal_paid_at,
+    // ★ 改用 is_first_payment_paid 或 first_payment_status（來自 v_renewal_reminders）
+    is_paid: contract.is_first_payment_paid || contract.first_payment_status === 'paid',
     is_signed: !!contract.renewal_signed_at,
     is_invoiced: contract.invoice_status && contract.invoice_status !== 'pending_tax_id'
   }
