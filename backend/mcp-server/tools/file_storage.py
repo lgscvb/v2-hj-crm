@@ -33,7 +33,7 @@ R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "hourjungle-files")
 R2_ENDPOINT = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com" if R2_ACCOUNT_ID else ""
 
 # 簽名 URL 預設過期時間（秒）
-DEFAULT_URL_EXPIRY = 3600  # 1 小時
+DEFAULT_URL_EXPIRY = 1209600  # 2 週（14 天）
 
 
 def get_r2_client():
