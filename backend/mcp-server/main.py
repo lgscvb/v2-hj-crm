@@ -254,6 +254,15 @@ from tools.billing_tools_v2 import (
     set_postgrest_rpc as set_billing_v2_rpc
 )
 
+# File Storage - Cloudflare R2
+from tools.file_storage import (
+    file_upload,
+    file_get_signed_url,
+    file_list,
+    file_delete,
+    file_log_access
+)
+
 # DDD Domain Tools - Renewal (v2 with RenewalCase entity)
 from tools.renewal_tools_v2 import (
     renewal_start,
@@ -996,6 +1005,70 @@ MCP_TOOLS = {
             "reject_reason": {"type": "string", "description": "駁回原因", "required": True}
         },
         "handler": billing_reject_waive_v2
+    },
+
+    # ==========================================================================
+    # File Storage - Cloudflare R2 文件存儲
+    # ==========================================================================
+    "file_upload": {
+        "description": "上傳文件到 Cloudflare R2",
+        "parameters": {
+            "file_content": {"type": "string", "description": "Base64 編碼的文件內容", "required": True},
+            "file_name": {"type": "string", "description": "原始文件名", "required": True},
+            "file_type": {"type": "string", "description": "文件類型 (contract_pdf, quote, invoice, attachment)", "required": True},
+            "entity_type": {"type": "string", "description": "關聯類型 (contract, quote, customer)", "required": True},
+            "entity_id": {"type": "integer", "description": "關聯 ID", "required": True},
+            "content_type": {"type": "string", "description": "MIME 類型", "optional": True},
+            "uploaded_by_id": {"type": "integer", "description": "上傳者 ID", "optional": True},
+            "uploaded_by_name": {"type": "string", "description": "上傳者名稱", "optional": True}
+        },
+        "handler": file_upload
+    },
+    "file_get_signed_url": {
+        "description": "產生文件的簽名下載 URL",
+        "parameters": {
+            "file_path": {"type": "string", "description": "R2 文件路徑", "required": True},
+            "expiry_seconds": {"type": "integer", "description": "URL 過期時間（秒）", "optional": True},
+            "user_id": {"type": "integer", "description": "存取者 ID", "optional": True},
+            "user_name": {"type": "string", "description": "存取者名稱", "optional": True},
+            "ip_address": {"type": "string", "description": "存取者 IP", "optional": True}
+        },
+        "handler": file_get_signed_url
+    },
+    "file_list": {
+        "description": "列出實體相關的所有文件",
+        "parameters": {
+            "entity_type": {"type": "string", "description": "實體類型 (contract, quote, customer)", "required": True},
+            "entity_id": {"type": "integer", "description": "實體 ID", "required": True},
+            "file_type": {"type": "string", "description": "文件類型篩選", "optional": True},
+            "include_deleted": {"type": "boolean", "description": "是否包含已刪除", "optional": True}
+        },
+        "handler": file_list
+    },
+    "file_delete": {
+        "description": "刪除文件（預設軟刪除）",
+        "parameters": {
+            "file_path": {"type": "string", "description": "R2 文件路徑", "required": True},
+            "reason": {"type": "string", "description": "刪除原因", "optional": True},
+            "deleted_by_id": {"type": "integer", "description": "刪除者 ID", "optional": True},
+            "deleted_by_name": {"type": "string", "description": "刪除者名稱", "optional": True},
+            "hard_delete": {"type": "boolean", "description": "是否永久刪除", "optional": True}
+        },
+        "handler": file_delete
+    },
+    "file_log_access": {
+        "description": "記錄文件存取日誌（審計追蹤）",
+        "parameters": {
+            "file_path": {"type": "string", "description": "文件路徑", "required": True},
+            "action": {"type": "string", "description": "操作類型 (view, download, upload, delete)", "required": True},
+            "user_id": {"type": "integer", "description": "使用者 ID", "optional": True},
+            "user_name": {"type": "string", "description": "使用者名稱", "optional": True},
+            "user_type": {"type": "string", "description": "使用者類型 (staff, customer, system)", "optional": True},
+            "ip_address": {"type": "string", "description": "IP 位址", "optional": True},
+            "user_agent": {"type": "string", "description": "瀏覽器資訊", "optional": True},
+            "metadata": {"type": "object", "description": "額外資訊", "optional": True}
+        },
+        "handler": file_log_access
     },
 
     # ==========================================================================
