@@ -60,7 +60,8 @@ ORDER BY p.id;
 UPDATE payments p
 SET
     payment_status = 'cancelled',
-    notes = COALESCE(notes, '') || E'\n[系統修正] ' || NOW()::DATE ||
+    -- ★ 注意：必須用 p.notes 避免與 contracts 表的 notes 欄位混淆
+    notes = COALESCE(p.notes, '') || E'\n[系統修正] ' || NOW()::DATE ||
             ' - 因期數計算邏輯錯誤取消（due_date >= contract.end_date）',
     updated_at = NOW()
 FROM contracts c
