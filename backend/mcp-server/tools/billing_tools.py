@@ -159,15 +159,108 @@ async def billing_record_payment(
         except Exception as audit_err:
             logger.warning(f"審計日誌記錄失敗（不影響主流程）: {audit_err}")
 
-        return {
+        # 6. 自動開票（如果客戶有發票資訊）
+        auto_invoice_result = None
+        try:
+            auto_invoice_result = await _try_auto_invoice(payment_id, payment)
+        except Exception as invoice_err:
+            logger.warning(f"自動開票失敗（不影響付款記錄）: {invoice_err}")
+            auto_invoice_result = {"success": False, "error": str(invoice_err)}
+
+        result = {
             "success": True,
             "message": f"付款 #{payment_id} 已標記為已付款",
             "payment": updated_payment
         }
 
+        if auto_invoice_result:
+            result["auto_invoice"] = auto_invoice_result
+
+        return result
+
     except Exception as e:
         logger.error(f"billing_record_payment error: {e}")
         raise
+
+
+async def _try_auto_invoice(payment_id: int, payment: dict) -> Optional[Dict[str, Any]]:
+    """
+    嘗試自動開票
+
+    條件：
+    1. 客戶有設定 invoice_tax_id（公司戶）
+    2. 付款金額 > 0
+    3. 尚未開票
+
+    Returns:
+        開票結果或 None（不符合自動開票條件）
+    """
+    # 檢查是否已開票
+    if payment.get("invoice_number"):
+        return None
+
+    # 檢查金額
+    amount = float(payment.get("amount", 0))
+    if amount <= 0:
+        return None
+
+    # 取得客戶資訊
+    customer_id = payment.get("customer_id")
+    if not customer_id:
+        return None
+
+    customers = await postgrest_get("customers", {
+        "id": f"eq.{customer_id}",
+        "select": "id,name,company_name,invoice_tax_id,invoice_title,invoice_carrier"
+    })
+
+    if not customers:
+        return None
+
+    customer = customers[0]
+
+    # 判斷發票類型
+    invoice_tax_id = customer.get("invoice_tax_id")
+    invoice_carrier = customer.get("invoice_carrier")
+
+    # 如果沒有統編也沒有載具，不自動開票
+    if not invoice_tax_id and not invoice_carrier:
+        return {"skipped": True, "reason": "客戶未設定發票資訊"}
+
+    # 呼叫開票工具
+    try:
+        from tools.invoice_tools_v2 import invoice_create_v2
+
+        if invoice_tax_id:
+            # 公司發票
+            result = await invoice_create_v2(
+                payment_id=payment_id,
+                invoice_type="company",
+                buyer_name=customer.get("invoice_title") or customer.get("company_name") or customer.get("name"),
+                buyer_tax_id=invoice_tax_id,
+                created_by="system_auto"
+            )
+        else:
+            # 個人發票（載具）
+            result = await invoice_create_v2(
+                payment_id=payment_id,
+                invoice_type="personal",
+                buyer_name=customer.get("name"),
+                carrier_type="mobile_barcode" if invoice_carrier else None,
+                carrier_number=invoice_carrier,
+                created_by="system_auto"
+            )
+
+        if result.get("success"):
+            logger.info(f"自動開票成功: payment_id={payment_id}, invoice={result.get('invoice_number')}")
+        else:
+            logger.warning(f"自動開票失敗: payment_id={payment_id}, error={result.get('message')}")
+
+        return result
+
+    except Exception as e:
+        logger.error(f"自動開票異常: {e}")
+        return {"success": False, "error": str(e)}
 
 
 async def billing_undo_payment(
