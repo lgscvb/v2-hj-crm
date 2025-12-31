@@ -30,6 +30,7 @@ import ContractWorkspace from './pages/ContractWorkspace'
 import ServicePlans from './pages/ServicePlans'
 import Terminations from './pages/Terminations'
 import ProcessDashboard from './pages/ProcessDashboard'
+import IntegrityAlerts from './pages/IntegrityAlerts'
 
 function App() {
   return (
@@ -65,6 +66,7 @@ function App() {
         <Route path="ai-learning" element={<AILearning />} />
         <Route path="dev-tools" element={<DevTools />} />
         <Route path="data-validation" element={<DataValidation />} />
+        <Route path="admin/integrity" element={<IntegrityAlerts />} />
         <Route path="bookings" element={<Bookings />} />
         <Route path="floor-plan" element={<FloorPlan />} />
         <Route path="settings" element={<Settings />} />
