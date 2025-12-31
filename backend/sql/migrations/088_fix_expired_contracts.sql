@@ -38,7 +38,7 @@ END $$;
 -- ============================================================================
 
 -- 停用 trigger（資料修復專用）
-ALTER TABLE contracts DISABLE TRIGGER protect_contract_critical_fields_trigger;
+ALTER TABLE contracts DISABLE TRIGGER tr_protect_contract_critical_fields;
 
 UPDATE contracts c
 SET status = 'expired',
@@ -53,7 +53,7 @@ WHERE c.status = 'active'
   );
 
 -- 重新啟用 trigger
-ALTER TABLE contracts ENABLE TRIGGER protect_contract_critical_fields_trigger;
+ALTER TABLE contracts ENABLE TRIGGER tr_protect_contract_critical_fields;
 
 -- ============================================================================
 -- 3. 驗證結果
