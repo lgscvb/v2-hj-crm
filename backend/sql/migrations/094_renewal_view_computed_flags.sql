@@ -323,7 +323,7 @@ BEGIN
             stats_record.monthly_revenue,
             stats_record.monthly_pending,
             stats_record.monthly_overdue;
-        RAISE NOTICE '   收款率: %%',
+        RAISE NOTICE '   收款率: % %%',
             stats_record.collection_rate;
     ELSE
         RAISE NOTICE '（無場館資料）';
