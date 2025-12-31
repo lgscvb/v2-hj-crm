@@ -7,6 +7,7 @@ import Contracts from './pages/Contracts'
 import ContractDetail from './pages/ContractDetail'
 import ExpiredContracts from './pages/ExpiredContracts'
 import Payments from './pages/Payments'
+import MonthlyPayments from './pages/MonthlyPayments'
 import Renewals from './pages/Renewals'
 import Commissions from './pages/Commissions'
 import Quotes from './pages/Quotes'
@@ -52,6 +53,7 @@ function App() {
         <Route path="contracts/:id/workspace" element={<ContractWorkspace />} />
         <Route path="payments/legal-letters" element={<LegalLetters />} />
         <Route path="payments" element={<Payments />} />
+        <Route path="payments/monthly" element={<MonthlyPayments />} />
         <Route path="invoices" element={<Invoices />} />
         <Route path="renewals" element={<Renewals />} />
         <Route path="terminations" element={<Terminations />} />
