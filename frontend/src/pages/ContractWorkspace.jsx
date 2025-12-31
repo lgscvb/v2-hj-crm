@@ -110,6 +110,7 @@ function DecisionPanel({ decision, contract, nextContract, onAction, isLoading }
   }
 
   const blockedLabels = {
+    ready_for_draft: '已確認續約，可建立草稿',
     need_create_renewal: '尚未建立續約合約',
     need_send_for_sign: '合約草稿待送簽',
     waiting_for_sign: '等待客戶回簽',
@@ -131,6 +132,7 @@ function DecisionPanel({ decision, contract, nextContract, onAction, isLoading }
     const actions = []
 
     switch (decision.blocked_by) {
+      case 'ready_for_draft':
       case 'need_create_renewal':
         actions.push({
           key: 'create_draft',
