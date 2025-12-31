@@ -34,7 +34,7 @@ import {
   Calendar,
   User
 } from 'lucide-react'
-import { PRIORITY_COLORS, OWNER_COLORS, PROCESS_ICONS } from './index'
+import { PRIORITY_COLORS, OWNER_COLORS, PROCESS_ICONS } from './constants'
 
 // 優先級圖示
 const PRIORITY_ICONS = {

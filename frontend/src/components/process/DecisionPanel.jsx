@@ -34,7 +34,7 @@ import {
   ArrowRight
 } from 'lucide-react'
 import { executeAction } from './ActionDispatcher'
-import { PRIORITY_COLORS, OWNER_COLORS } from './index'
+import { PRIORITY_COLORS, OWNER_COLORS } from './constants'
 
 // 通用卡點標籤對照表（可擴充）
 const BLOCKED_LABELS = {

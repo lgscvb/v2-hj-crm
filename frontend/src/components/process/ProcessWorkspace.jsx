@@ -29,7 +29,7 @@ import {
 } from 'lucide-react'
 import DecisionPanel from './DecisionPanel'
 import ProcessTimeline from './ProcessTimeline'
-import { PROCESS_ICONS } from './index'
+import { PROCESS_ICONS } from './constants'
 
 /**
  * 載入狀態

@@ -23,7 +23,7 @@ import {
   RefreshCw
 } from 'lucide-react'
 import { db } from '../../services/api'
-import { PROCESS_ICONS, PRIORITY_COLORS } from './index'
+import { PROCESS_ICONS, PRIORITY_COLORS } from './constants'
 import ProcessCard from './ProcessCard'
 
 // 流程配置
