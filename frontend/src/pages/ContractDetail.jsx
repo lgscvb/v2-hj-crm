@@ -321,6 +321,12 @@ export default function ContractDetail() {
   const sendReminder = useSendPaymentReminder()
   const updateCustomer = useUpdateCustomer()
 
+  // ★ 提前宣告，避免 TDZ 錯誤（這些變數會在 useEffect 中使用）
+  const contract = result?.data?.contract
+  const customer = result?.data?.customer
+  const branch = result?.data?.branch
+  const payments = result?.data?.payments || []
+
   const [showPayModal, setShowPayModal] = useState(false)
   const [showReminderModal, setShowReminderModal] = useState(false)
   const [showEditCustomerModal, setShowEditCustomerModal] = useState(false)
@@ -643,11 +649,6 @@ export default function ContractDetail() {
       }
     })
   }
-
-  const contract = result?.data?.contract
-  const customer = result?.data?.customer
-  const branch = result?.data?.branch
-  const payments = result?.data?.payments || []
 
   // 計算繳費統計
   const paymentStats = {
