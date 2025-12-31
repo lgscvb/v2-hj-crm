@@ -63,7 +63,7 @@ export function useProcessWorkspace(processKey, entityId, options = {}) {
         [`${idField}`]: `eq.${entityId}`
       }
 
-      const data = await db.get(viewName, params)
+      const data = await db.query(viewName, params)
       return data?.[0] || null
     },
     enabled: !!entityId && !!processKey,
@@ -112,7 +112,7 @@ export function useProcessQueue(processKey, filters = {}) {
         params.branch_id = `eq.${selectedBranch}`
       }
 
-      return db.get(viewName, params)
+      return db.query(viewName, params)
     },
     enabled: !!processKey
   })
@@ -129,19 +129,19 @@ export function useProcessDashboardStats() {
     queryFn: async () => {
       // 並行取得各流程統計
       const [renewalData, signingData, terminationData, paymentData] = await Promise.all([
-        db.get('v_contract_workspace', {
+        db.query('v_contract_workspace', {
           decision_blocked_by: 'not.is.null',
           'decision_blocked_by': 'neq.completed',
           select: 'contract_id,decision_priority,is_overdue',
           ...(selectedBranch && { branch_id: `eq.${selectedBranch}` })
         }),
-        db.get('v_contract_workspace', {
+        db.query('v_contract_workspace', {
           decision_blocked_by: 'not.is.null',
           signing_status: 'not.eq.completed',
           select: 'contract_id,decision_priority,is_overdue',
           ...(selectedBranch && { branch_id: `eq.${selectedBranch}` })
         }),
-        db.get('v_termination_workspace', {
+        db.query('v_termination_workspace', {
           select: 'id,status',
           status: 'neq.completed',
           ...(selectedBranch && { branch_id: `eq.${selectedBranch}` })
