@@ -222,6 +222,13 @@ export const db = {
     return ensureArray(data)
   },
 
+  // 儀表板統計（聚合所有場館，取代前端 reduce）
+  async getDashboardStats() {
+    const data = await api.get('/api/db/v_dashboard_stats')
+    const arr = ensureArray(data)
+    return arr[0] || null
+  },
+
   // 今日待辦
   async getTodayTasks(params = {}) {
     const data = await api.get('/api/db/v_today_tasks', { params })

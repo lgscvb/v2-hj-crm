@@ -407,6 +407,17 @@ export function useBranchRevenue() {
   })
 }
 
+// 儀表板統計（聚合所有場館，取代前端 reduce）
+export function useDashboardStats() {
+  return useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: async () => {
+      const data = await db.getDashboardStats()
+      return data
+    }
+  })
+}
+
 export function useTodayTasks() {
   const selectedBranch = useStore((state) => state.selectedBranch)
 

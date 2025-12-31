@@ -35,42 +35,47 @@ import {
 } from 'lucide-react'
 
 // ============================================================================
-// Checklist 相關：Computed Flags 和 Display Status
+// Checklist 相關：直接使用 v_renewal_reminders 的計算欄位
 // ============================================================================
 //
-// V3.1 設計（SSOT + 完整流程）：
-// - 意願管理：已通知、已確認（可手動勾選）
-// - 合約建立：建立草稿、發送簽署、客戶回簽（唯讀，從 next_contract 計算）
-// - 財務完成：款項收取、發票開立（唯讀，從 payment/invoice 計算）
+// ★ 2025-12-31 重構：直接讀取 View 計算的欄位，不再在前端重複計算
+// 保持 SSOT 原則
 //
-// 7 步驟流程：
-// 1. 通知客戶 - renewal_notified_at
-// 2. 確認續約意願 - renewal_confirmed_at
-// 3. 建立續約草稿 - has_renewal_draft / next_contract_id
-// 4. 發送簽署 - is_sent_for_sign / next_sent_for_sign_at
-// 5. 客戶回簽 - is_next_signed / next_signed_at
-// 6. 款項收取 - is_first_payment_paid（NEW contract's first payment）
-// 7. 發票開立 - is_next_invoiced（NEW contract's invoice）
+// V3.2 設計（SSOT + 完整流程）：
+// - 意願管理：is_notified, is_confirmed（View 計算）
+// - 合約建立：has_renewal_draft, is_sent_for_sign, is_signed（View 計算）
+// - 財務完成：is_paid, is_invoiced（View 計算）
+//
+// 7 步驟流程（View 已提供所有欄位）：
+// 1. 通知客戶 - is_notified
+// 2. 確認續約意願 - is_confirmed
+// 3. 建立續約草稿 - has_renewal_draft
+// 4. 發送簽署 - is_sent_for_sign
+// 5. 客戶回簽 - is_signed
+// 6. 款項收取 - is_paid
+// 7. 發票開立 - is_invoiced
 // ============================================================================
 
-// 從視圖欄位計算 flags（V3.1 完整流程）
-function computeFlags(contract) {
+// 直接從 View 取得 flags（SSOT）
+function getFlags(contract) {
   return {
-    // 意願管理（可手動更新）
-    is_notified: !!contract.renewal_notified_at,
-    is_confirmed: !!contract.renewal_confirmed_at,
+    // 意願管理（View 已計算）
+    is_notified: !!contract.is_notified,
+    is_confirmed: !!contract.is_confirmed,
 
-    // 合約建立（唯讀，從 next_contract 計算）
-    has_draft: !!contract.has_renewal_draft || !!contract.next_contract_id,
-    is_sent_for_sign: !!contract.is_sent_for_sign || !!contract.next_sent_for_sign_at,
-    is_signed: !!contract.is_next_signed || !!contract.next_signed_at,
+    // 合約建立（View 已計算）
+    has_draft: !!contract.has_renewal_draft,
+    is_sent_for_sign: !!contract.is_sent_for_sign,
+    is_signed: !!contract.is_signed,
 
-    // 財務完成（唯讀，從 payment/invoice 計算）
-    is_paid: contract.is_first_payment_paid || contract.first_payment_status === 'paid',
-    is_invoiced: contract.is_next_invoiced ||
-      (contract.invoice_status && contract.invoice_status !== 'pending_tax_id')
+    // 財務完成（View 已計算）
+    is_paid: !!contract.is_paid,
+    is_invoiced: !!contract.is_invoiced
   }
 }
+
+// 保留 computeFlags 作為別名（向後相容）
+const computeFlags = getFlags
 
 // 根據 flags 計算顯示狀態（7 步驟）
 function getDisplayStatus(contract) {

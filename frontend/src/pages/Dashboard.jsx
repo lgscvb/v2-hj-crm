@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useBranchRevenue, useTodayTasks, useOverdueDetails, useRenewalReminders, usePaymentsDue, useTodayBookings, useTerminationCases, usePendingSignContracts, useTerminationWorkspace } from '../hooks/useApi'
+import { useBranchRevenue, useDashboardStats, useTodayTasks, useOverdueDetails, useRenewalReminders, usePaymentsDue, useTodayBookings, useTerminationCases, usePendingSignContracts, useTerminationWorkspace } from '../hooks/useApi'
 import { useNavigate } from 'react-router-dom'
 import {
   Users,
@@ -31,45 +31,24 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444']
 
 // ============================================================================
-// 續約 Checklist 相關：從時間戳計算狀態
+// 續約 Checklist 相關：直接使用 v_renewal_reminders 的計算欄位
 // ============================================================================
 
-// ★ 2025-12-31 重構：改用 v_renewal_reminders 的 SSOT 欄位
-// 已移除 deprecated 的 renewal_*_at 欄位
-function computeFlags(contract) {
-  return {
-    // is_notified/is_confirmed: 這些流程已不在 contracts 表追蹤
-    // 如果有 next_contract（續約草稿），視為已確認意向
-    is_notified: !!contract.next_contract_id || contract.days_remaining <= 60,
-    is_confirmed: !!contract.next_contract_id,
-    // 使用 v_renewal_reminders 的 SSOT 欄位
-    is_paid: contract.is_first_payment_paid || contract.first_payment_status === 'paid',
-    is_signed: contract.is_next_signed,
-    is_invoiced: contract.is_next_invoiced
-  }
-}
-
+// ★ 2025-12-31 重構：直接讀取 View 計算的 completion_score
+// 不再在前端計算，保持 SSOT 原則
 function getDisplayStatus(contract) {
-  const flags = computeFlags(contract)
+  // 直接使用 View 的 completion_score（0-5）
+  const score = contract.completion_score || 0
 
-  // 檢查是否全部完成
-  const allDone = flags.is_notified && flags.is_confirmed &&
-    flags.is_paid && flags.is_invoiced && flags.is_signed
-  if (allDone) return { stage: 'completed', progress: 5 }
-
-  // 檢查是否尚未開始
-  const noneStarted = !flags.is_notified && !flags.is_confirmed &&
-    !flags.is_paid && !flags.is_invoiced && !flags.is_signed
-  if (noneStarted) return { stage: 'pending', progress: 0 }
-
-  // 進行中
-  const progress = [flags.is_notified, flags.is_confirmed, flags.is_paid, flags.is_invoiced, flags.is_signed].filter(Boolean).length
-  return { stage: 'in_progress', progress }
+  if (score >= 5) return { stage: 'completed', progress: 5 }
+  if (score === 0) return { stage: 'pending', progress: 0 }
+  return { stage: 'in_progress', progress: score }
 }
 
 export default function Dashboard() {
   const navigate = useNavigate()
   const { data: branchRevenue, isLoading: revenueLoading } = useBranchRevenue()
+  const { data: dashboardStats, isLoading: statsLoading } = useDashboardStats()
   const { data: todayTasks, isLoading: tasksLoading } = useTodayTasks()
   const { data: overdue, isLoading: overdueLoading, refetch: refetchOverdue } = useOverdueDetails()
   const { data: renewals } = useRenewalReminders()
@@ -114,29 +93,20 @@ export default function Dashboard() {
     }
   }
 
-  // 計算統計（金額與筆數）
+  // ★ 2025-12-31 重構：改用 v_dashboard_stats View（已在資料庫聚合）
+  // 移除前端 reduce() 計算，保持 SSOT 原則
   const branchRevenueArr = Array.isArray(branchRevenue) ? branchRevenue : []
-  const stats = branchRevenueArr.reduce(
-    (acc, branch) => ({
-      totalCustomers: acc.totalCustomers + (branch.active_customers || 0),
-      totalContracts: acc.totalContracts + (branch.active_contracts || 0),
-      monthlyRevenue: acc.monthlyRevenue + (branch.current_month_revenue || 0),
-      monthlyPending: acc.monthlyPending + (branch.current_month_pending || 0),
-      overdueAmount: acc.overdueAmount + (branch.current_month_overdue || 0),
-      paidCount: acc.paidCount + (branch.current_month_paid_count || 0),
-      pendingCount: acc.pendingCount + (branch.current_month_pending_count || 0),
-      overdueCount: acc.overdueCount + (branch.current_month_overdue_count || 0)
-    }),
-    { totalCustomers: 0, totalContracts: 0, monthlyRevenue: 0, monthlyPending: 0, overdueAmount: 0, paidCount: 0, pendingCount: 0, overdueCount: 0 }
-  )
 
-  // 計算本期應收、已收、未收（金額與筆數）
-  const receivable = (stats.monthlyRevenue || 0) + (stats.monthlyPending || 0) + (stats.overdueAmount || 0)
-  const receivableCount = (stats.paidCount || 0) + (stats.pendingCount || 0) + (stats.overdueCount || 0)
-  const received = stats.monthlyRevenue || 0
-  const receivedCount = stats.paidCount || 0
-  const outstanding = (stats.monthlyPending || 0) + (stats.overdueAmount || 0)
-  const outstandingCount = (stats.pendingCount || 0) + (stats.overdueCount || 0)
+  // 從 View 取得聚合統計
+  const receivable = Number(dashboardStats?.monthly_receivable) || 0
+  const receivableCount = Number(dashboardStats?.receivable_count) || 0
+  const received = Number(dashboardStats?.monthly_revenue) || 0
+  const receivedCount = Number(dashboardStats?.paid_count) || 0
+  const outstanding = Number(dashboardStats?.monthly_outstanding) || 0
+  const outstandingCount = Number(dashboardStats?.outstanding_count) || 0
+  const overdueAmount = Number(dashboardStats?.monthly_overdue) || 0
+  const overdueCount = Number(dashboardStats?.overdue_count) || 0
+  const monthlyPending = Number(dashboardStats?.monthly_pending) || 0
 
   // 圖表資料
   const chartData = branchRevenueArr.map((b) => ({
@@ -148,8 +118,8 @@ export default function Dashboard() {
 
   const pieData = [
     { name: '已收款', value: received },
-    { name: '待收款', value: stats.monthlyPending || 0 },
-    { name: '逾期', value: stats.overdueAmount || 0 }
+    { name: '待收款', value: monthlyPending },
+    { name: '逾期', value: overdueAmount }
   ].filter(d => d.value > 0)
 
   const priorityIcon = {
@@ -247,7 +217,7 @@ export default function Dashboard() {
           icon={DollarSign}
           iconBg="bg-blue-100"
           iconColor="text-blue-600"
-          loading={revenueLoading}
+          loading={statsLoading}
         />
         <StatCard
           title="本期已收"
@@ -256,7 +226,7 @@ export default function Dashboard() {
           icon={CheckCircle}
           iconBg="bg-green-100"
           iconColor="text-green-600"
-          loading={revenueLoading}
+          loading={statsLoading}
         />
         <StatCard
           title="本期未收"
@@ -265,16 +235,16 @@ export default function Dashboard() {
           icon={Clock}
           iconBg="bg-amber-100"
           iconColor="text-amber-600"
-          loading={revenueLoading}
+          loading={statsLoading}
         />
         <StatCard
           title="逾期金額"
-          value={`$${(stats.overdueAmount || 0).toLocaleString()}`}
-          subtitle={`共 ${stats.overdueCount || 0} 筆`}
+          value={`$${overdueAmount.toLocaleString()}`}
+          subtitle={`共 ${overdueCount} 筆`}
           icon={AlertTriangle}
           iconBg="bg-red-100"
           iconColor="text-red-600"
-          loading={revenueLoading}
+          loading={statsLoading}
         />
       </div>
 
