@@ -415,6 +415,24 @@ export default function ContractDetail() {
   // 續約相關函數
   // ============================================================================
 
+  // 載入時檢查是否有續約草稿（用於按鈕顯示）
+  useEffect(() => {
+    const checkDraft = async () => {
+      if (!contract || contract.status !== 'active') return
+      try {
+        const result = await crm.callTool('renewal_check_draft', {
+          old_contract_id: contract.id
+        })
+        if (result?.has_draft) {
+          setRenewalDraft(result.draft)
+        }
+      } catch (error) {
+        console.error('檢查續約草稿失敗:', error)
+      }
+    }
+    checkDraft()
+  }, [contract?.id, contract?.status])
+
   // 開啟續約 Modal
   const openRenewalModal = async () => {
     if (!contract) return
@@ -810,7 +828,14 @@ export default function ContractDetail() {
         </button>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">{contract.contract_number}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {contract.contract_number}
+              {contract.contract_period > 1 && (
+                <span className="ml-2 text-sm font-normal text-gray-500">
+                  （第{contract.contract_period}期）
+                </span>
+              )}
+            </h1>
             <StatusBadge status={contract.status} />
           </div>
           <p className="text-gray-500">
@@ -826,15 +851,17 @@ export default function ContractDetail() {
           <button
             onClick={openRenewalModal}
             disabled={renewalLoading}
-            className="btn-secondary bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
-            title="辦理續約"
+            className={`btn-secondary ${renewalDraft
+              ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+              : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'}`}
+            title={renewalDraft ? '繼續編輯續約草稿' : '建立續約草稿'}
           >
             {renewalLoading ? (
               <Loader2 className="w-4 h-4 animate-spin mr-2" />
             ) : (
               <RotateCcw className="w-4 h-4 mr-2" />
             )}
-            續約
+            {renewalDraft ? '繼續編輯' : '建立續約'}
           </button>
         )}
         <button

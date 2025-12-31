@@ -627,7 +627,12 @@ export default function Contracts() {
       cell: (row) => (
         <div className="flex items-center gap-2">
           <FileText className="w-4 h-4 text-gray-400" />
-          <span className="font-medium text-primary-600">{row.contract_number}</span>
+          <span className="font-medium text-primary-600">
+            {row.contract_number}
+            {row.contract_period > 1 && (
+              <span className="ml-1 text-xs text-gray-500">（第{row.contract_period}期）</span>
+            )}
+          </span>
         </div>
       )
     },

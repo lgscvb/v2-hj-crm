@@ -206,10 +206,10 @@ async def renewal_create_draft(
             "code": "INVALID_STATUS"
         }
 
-    # 4. 檢查是否已有續約草稿
+    # 4. 檢查是否已有續約草稿（get-or-create 模式）
     existing_drafts = await postgrest_get("contracts", {
         "renewed_from_id": f"eq.{contract_id}",
-        "status": "in.(renewal_draft,active)"
+        "status": "in.(renewal_draft,pending_sign,active)"
     })
     if existing_drafts:
         existing = existing_drafts[0]
@@ -221,11 +221,13 @@ async def renewal_create_draft(
                 "existing_contract_id": existing["id"]
             }
         else:
+            # ★ get-or-create：返回現有草稿，不報錯
             return {
-                "success": False,
-                "error": "此合約已有續約草稿，請先完成或取消",
-                "code": "DRAFT_EXISTS",
-                "existing_draft_id": existing["id"]
+                "success": True,
+                "draft_id": existing["id"],
+                "draft": existing,
+                "is_existing": True,
+                "message": f"返回現有續約草稿（第 {existing.get('contract_period', '?')} 期）"
             }
 
     # 5. 沿用合約編號，遞增期數
