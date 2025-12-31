@@ -74,10 +74,11 @@ async def update_invoice_status(
     notes: Optional[str] = None
 ) -> dict:
     """
-    [V2 過渡期] 更新合約的發票狀態
+    [已棄用] 更新合約的發票狀態
 
-    ⚠️ V3 設計中，發票狀態應由 Invoices 系統管理 (SSOT)
-    此工具保留於過渡期使用，未來將由發票模組完全接管
+    ⚠️ 此工具已棄用（2025-12-31）
+    發票狀態應由 Invoices 系統管理 (SSOT)
+    請使用 invoice_create_v2 工具開立發票
 
     Args:
         contract_id: 合約 ID
@@ -85,43 +86,16 @@ async def update_invoice_status(
         notes: 備註
 
     Returns:
-        更新結果
+        棄用警告
     """
-    # V3 護欄：記錄使用情況（過渡期）
-    logger.info(f"[V2 過渡期] update_invoice_status 被呼叫，contract_id={contract_id}，invoice_status={invoice_status}")
+    logger.warning(f"[已棄用] update_invoice_status 被呼叫，contract_id={contract_id}")
 
-    if invoice_status not in VALID_INVOICE_STATUSES:
-        return {
-            "success": False,
-            "error": f"無效的發票狀態: {invoice_status}。有效值: {', '.join(VALID_INVOICE_STATUSES)}"
-        }
-
-    update_data = {
-        "invoice_status": invoice_status
+    return {
+        "success": False,
+        "error": "此工具已棄用。發票狀態由 Invoices 系統管理。",
+        "deprecated": True,
+        "alternative": "使用 invoice_create_v2 開立發票，狀態會自動更新"
     }
-
-    if notes:
-        update_data["renewal_notes"] = notes
-
-    try:
-        result = await postgrest_request(
-            "PATCH",
-            f"contracts?id=eq.{contract_id}",
-            data=update_data,
-            headers={"Prefer": "return=representation"}
-        )
-
-        return {
-            "success": True,
-            "contract_id": contract_id,
-            "invoice_status": invoice_status
-        }
-    except Exception as e:
-        logger.error(f"更新發票狀態失敗: {e}")
-        return {
-            "success": False,
-            "error": str(e)
-        }
 
 
 async def get_renewal_status_summary(

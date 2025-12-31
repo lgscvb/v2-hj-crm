@@ -565,70 +565,11 @@ export const billing = {
 }
 
 // ============================================================================
-// Renewal Tools (DDD 領域服務)
+// [已移除] Renewal Tools V2 (RenewalCase 實體)
+// 已於 2025-12-31 移除，改用 V3 架構：
+// - 意願管理：set_renewal_intent
+// - 交易管理：renewal_create_draft + renewal_activate
 // ============================================================================
-
-export const renewal = {
-  // 開始續約流程
-  async start(contractId) {
-    return callTool('renewal_start', { contract_id: contractId })
-  },
-
-  // 發送續約通知
-  async sendNotification(renewalCaseId, channel = 'line') {
-    return callTool('renewal_send_notification', {
-      renewal_case_id: renewalCaseId,
-      channel
-    })
-  },
-
-  // 確認續約意向
-  async confirmIntent(renewalCaseId, intent, newEndDate = null, newMonthlyRent = null, notes = null) {
-    return callTool('renewal_confirm_intent', {
-      renewal_case_id: renewalCaseId,
-      intent,
-      new_end_date: newEndDate,
-      new_monthly_rent: newMonthlyRent,
-      notes
-    })
-  },
-
-  // 記錄續約費用
-  async recordPayment(renewalCaseId, paymentMethod, reference = null) {
-    return callTool('renewal_record_payment_v2', {
-      renewal_case_id: renewalCaseId,
-      payment_method: paymentMethod,
-      reference
-    })
-  },
-
-  // 完成續約
-  async complete(renewalCaseId) {
-    return callTool('renewal_complete', { renewal_case_id: renewalCaseId })
-  },
-
-  // 取消續約
-  async cancel(renewalCaseId, reason) {
-    return callTool('renewal_cancel', {
-      renewal_case_id: renewalCaseId,
-      reason
-    })
-  },
-
-  // 取得續約案例詳情
-  async getCase(renewalCaseId) {
-    return callTool('renewal_get_case', { renewal_case_id: renewalCaseId })
-  },
-
-  // 列出續約案例
-  async listCases(branchId = null, status = null, limit = 50) {
-    return callTool('renewal_list_cases', {
-      branch_id: branchId,
-      status,
-      limit
-    })
-  }
-}
 
 // ============================================================================
 // Contract Tools (DDD 領域服務)

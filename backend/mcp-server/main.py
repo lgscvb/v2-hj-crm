@@ -194,8 +194,16 @@ from tools.renewal_tools import (
     update_invoice_status,
     get_renewal_status_summary,
     batch_update_renewal_status,
-    renewal_set_flag,
+    renewal_set_flag,  # 保留為 alias，實際邏輯移至 intent_tools
     set_postgrest_request as set_renewal_postgrest
+)
+
+# Intent Tools - 續約意願管理（V3 抽象層）
+from tools.intent_tools import (
+    set_renewal_intent,
+    batch_set_renewal_intent,
+    get_renewal_intent,
+    list_pending_intents
 )
 
 from tools.quote_tools import (
@@ -263,17 +271,9 @@ from tools.file_storage import (
     file_log_access
 )
 
-# DDD Domain Tools - Renewal (v2 with RenewalCase entity)
-from tools.renewal_tools_v2 import (
-    renewal_start,
-    renewal_send_notification,
-    renewal_confirm_intent,
-    renewal_record_payment as renewal_record_payment_v2,
-    renewal_complete,
-    renewal_cancel,
-    renewal_get_case,
-    renewal_list_cases
-)
+# [已移除] DDD Domain Tools - Renewal V2 (RenewalCase entity)
+# 已於 2025-12-31 移除，改用 V3 架構（intent_tools + renewal_tools_v3）
+# 歷史資料保留在 renewal_cases 表（唯讀）
 
 # Renewal V3 - Draft Mechanism (兩階段提交 + Transaction 保護)
 from tools.renewal_tools_v3 import (
@@ -623,10 +623,10 @@ MCP_TOOLS = {
         "handler": update_renewal_status
     },
     "renewal_update_invoice_status": {
-        "description": "[V2 過渡期] 更新合約的發票狀態。未來將由發票模組 (SSOT) 管理",
+        "description": "[已棄用] 更新合約的發票狀態。請使用 invoice_create_v2 開立發票",
         "parameters": {
             "contract_id": {"type": "integer", "description": "合約ID", "required": True},
-            "invoice_status": {"type": "string", "description": "發票狀態 (pending_tax_id/issued_personal/issued_business)", "required": True},
+            "invoice_status": {"type": "string", "description": "發票狀態", "required": True},
             "notes": {"type": "string", "description": "備註", "optional": True}
         },
         "handler": update_invoice_status
@@ -648,7 +648,7 @@ MCP_TOOLS = {
         "handler": batch_update_renewal_status
     },
     "renewal_set_flag": {
-        "description": "[V3] 設定或清除續約意願 flag（notified/confirmed）。paid/signed 由 SSOT 系統管理，不可手動設定",
+        "description": "[Alias] 設定續約意願 flag。建議改用 set_renewal_intent",
         "parameters": {
             "contract_id": {"type": "integer", "description": "合約ID", "required": True},
             "flag": {"type": "string", "description": "意願 flag 名稱 (notified/confirmed)", "required": True},
@@ -656,6 +656,45 @@ MCP_TOOLS = {
             "notes": {"type": "string", "description": "備註", "optional": True}
         },
         "handler": renewal_set_flag
+    },
+
+    # ========================================================================
+    # Intent Tools - 續約意願管理（V3 抽象層）
+    # ========================================================================
+    "set_renewal_intent": {
+        "description": "[V3] 設定或清除續約意願（notified/confirmed）。交易線由 SSOT 系統管理",
+        "parameters": {
+            "contract_id": {"type": "integer", "description": "合約ID", "required": True},
+            "intent_type": {"type": "string", "description": "意願類型 (notified/confirmed)", "required": True},
+            "value": {"type": "boolean", "description": "True = 設定, False = 清除", "required": True},
+            "notes": {"type": "string", "description": "備註", "optional": True}
+        },
+        "handler": set_renewal_intent
+    },
+    "batch_set_renewal_intent": {
+        "description": "[V3] 批次設定續約意願",
+        "parameters": {
+            "contract_ids": {"type": "array", "items": {"type": "integer"}, "description": "合約ID列表", "required": True},
+            "intent_type": {"type": "string", "description": "意願類型 (notified/confirmed)", "required": True},
+            "value": {"type": "boolean", "description": "True = 設定, False = 清除", "required": True},
+            "notes": {"type": "string", "description": "備註", "optional": True}
+        },
+        "handler": batch_set_renewal_intent
+    },
+    "get_renewal_intent": {
+        "description": "[V3] 取得合約的續約意願狀態",
+        "parameters": {
+            "contract_id": {"type": "integer", "description": "合約ID", "required": True}
+        },
+        "handler": get_renewal_intent
+    },
+    "list_pending_intents": {
+        "description": "[V3] 列出待處理的續約意願（未通知或待確認）",
+        "parameters": {
+            "intent_type": {"type": "string", "description": "意願類型 (notified=尚未通知, confirmed=待確認)", "default": "notified"},
+            "limit": {"type": "integer", "description": "回傳筆數上限", "default": 50}
+        },
+        "handler": list_pending_intents
     },
 
     # 報價單工具
@@ -1072,81 +1111,12 @@ MCP_TOOLS = {
     },
 
     # ==========================================================================
-    # DDD Domain Tools - Renewal（續約領域，使用獨立 RenewalCase 實體）
+    # [已移除] DDD Domain Tools - Renewal V2（RenewalCase 實體）
+    # 已於 2025-12-31 移除，改用 V3 架構：
+    # - 意願管理：intent_tools (set_renewal_intent)
+    # - 交易管理：renewal_tools_v3 (renewal_create_draft + renewal_activate)
+    # 歷史資料保留在 renewal_cases 表（唯讀）
     # ==========================================================================
-    "renewal_start": {
-        "description": "開始續約流程（建立 RenewalCase，預留原座位）",
-        "parameters": {
-            "contract_id": {"type": "integer", "description": "合約ID", "required": True},
-            "created_by": {"type": "string", "description": "操作者", "optional": True}
-        },
-        "handler": renewal_start
-    },
-    "renewal_send_notification": {
-        "description": "發送續約通知（LINE 或 Email）",
-        "parameters": {
-            "renewal_case_id": {"type": "integer", "description": "續約案件ID", "required": True},
-            "channel": {"type": "string", "description": "通知管道 (line/email/both)", "optional": True}
-        },
-        "handler": renewal_send_notification
-    },
-    "renewal_confirm_intent": {
-        "description": "確認續約意願（客戶回覆確認）",
-        "parameters": {
-            "renewal_case_id": {"type": "integer", "description": "續約案件ID", "required": True},
-            "confirmed": {"type": "boolean", "description": "是否確認續約", "required": True},
-            "notes": {"type": "string", "description": "備註", "optional": True}
-        },
-        "handler": renewal_confirm_intent
-    },
-    "renewal_record_payment_v2": {
-        "description": "記錄續約款（更新 RenewalCase 狀態）",
-        "parameters": {
-            "renewal_case_id": {"type": "integer", "description": "續約案件ID", "required": True},
-            "payment_method": {"type": "string", "description": "付款方式", "required": True},
-            "amount": {"type": "number", "description": "金額", "required": True},
-            "notes": {"type": "string", "description": "備註", "optional": True}
-        },
-        "handler": renewal_record_payment_v2
-    },
-    "renewal_complete": {
-        "description": "完成續約（建立新合約，釋放座位預留）",
-        "parameters": {
-            "renewal_case_id": {"type": "integer", "description": "續約案件ID", "required": True},
-            "new_start_date": {"type": "string", "description": "新合約開始日期 (YYYY-MM-DD)", "required": True},
-            "new_end_date": {"type": "string", "description": "新合約結束日期 (YYYY-MM-DD)", "required": True},
-            "new_monthly_rent": {"type": "number", "description": "新月租金（不填則沿用）", "optional": True},
-            "notes": {"type": "string", "description": "備註", "optional": True}
-        },
-        "handler": renewal_complete
-    },
-    "renewal_cancel": {
-        "description": "取消續約（釋放座位預留）",
-        "parameters": {
-            "renewal_case_id": {"type": "integer", "description": "續約案件ID", "required": True},
-            "reason": {"type": "string", "description": "取消原因", "required": True},
-            "cancelled_by": {"type": "string", "description": "操作者", "optional": True}
-        },
-        "handler": renewal_cancel
-    },
-    "renewal_get_case": {
-        "description": "取得續約案件詳情",
-        "parameters": {
-            "renewal_case_id": {"type": "integer", "description": "續約案件ID", "optional": True},
-            "contract_id": {"type": "integer", "description": "合約ID（查詢該合約的續約案件）", "optional": True}
-        },
-        "handler": renewal_get_case
-    },
-    "renewal_list_cases": {
-        "description": "列出續約案件",
-        "parameters": {
-            "branch_id": {"type": "integer", "description": "場館ID", "optional": True},
-            "status": {"type": "string", "description": "狀態篩選 (created/notified/confirmed/paid/invoiced/completed/cancelled)", "optional": True},
-            "days_ahead": {"type": "integer", "description": "未來幾天內到期", "default": 30},
-            "limit": {"type": "integer", "description": "回傳筆數", "default": 50}
-        },
-        "handler": renewal_list_cases
-    },
 
     # ==========================================================================
     # Renewal V3 - Draft Mechanism（兩階段提交 + Transaction 保護）

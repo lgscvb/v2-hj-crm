@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { db, crm, line, reports, settings, legalLetter, billing, renewal, contract } from '../services/api'
+import { db, crm, line, reports, settings, legalLetter, billing, contract } from '../services/api'
 import useStore from '../store/useStore'
 
 // ============================================================================
@@ -325,107 +325,9 @@ export function useBillingBatchRemind() {
 }
 
 // ============================================================================
-// Renewal DDD Hooks (新版續約領域服務)
+// [已移除] Renewal DDD Hooks V2 (RenewalCase 實體)
+// 已於 2025-12-31 移除，改用 V3 架構
 // ============================================================================
-
-export function useRenewalCases(params = {}) {
-  const selectedBranch = useStore((state) => state.selectedBranch)
-
-  return useQuery({
-    queryKey: ['renewal-cases', params, selectedBranch],
-    queryFn: async () => {
-      const data = await renewal.listCases(selectedBranch, params.status, params.limit)
-      return data.success ? data.cases : []
-    }
-  })
-}
-
-export function useRenewalStart() {
-  const queryClient = useQueryClient()
-  const addNotification = useStore((state) => state.addNotification)
-
-  return useMutation({
-    mutationFn: ({ contractId }) => renewal.start(contractId),
-    onSuccess: (data) => {
-      if (data.success) {
-        queryClient.invalidateQueries({ queryKey: ['renewal-cases'] })
-        queryClient.invalidateQueries({ queryKey: ['renewals'] })
-        addNotification({ type: 'success', message: '續約流程已啟動' })
-      } else {
-        addNotification({ type: 'error', message: data.message || '啟動失敗' })
-      }
-    },
-    onError: (error) => {
-      addNotification({ type: 'error', message: `啟動失敗: ${error.message}` })
-    }
-  })
-}
-
-export function useRenewalSendNotification() {
-  const queryClient = useQueryClient()
-  const addNotification = useStore((state) => state.addNotification)
-
-  return useMutation({
-    mutationFn: ({ renewalCaseId, channel }) =>
-      renewal.sendNotification(renewalCaseId, channel),
-    onSuccess: (data) => {
-      if (data.success) {
-        queryClient.invalidateQueries({ queryKey: ['renewal-cases'] })
-        addNotification({ type: 'success', message: '續約通知已發送' })
-      } else {
-        addNotification({ type: 'error', message: data.message || '發送失敗' })
-      }
-    },
-    onError: (error) => {
-      addNotification({ type: 'error', message: `發送失敗: ${error.message}` })
-    }
-  })
-}
-
-export function useRenewalConfirmIntent() {
-  const queryClient = useQueryClient()
-  const addNotification = useStore((state) => state.addNotification)
-
-  return useMutation({
-    mutationFn: ({ renewalCaseId, intent, newEndDate, newMonthlyRent, notes }) =>
-      renewal.confirmIntent(renewalCaseId, intent, newEndDate, newMonthlyRent, notes),
-    onSuccess: (data) => {
-      if (data.success) {
-        queryClient.invalidateQueries({ queryKey: ['renewal-cases'] })
-        queryClient.invalidateQueries({ queryKey: ['contracts'] })
-        const intentText = data.intent === 'renew' ? '續約' : data.intent === 'terminate' ? '退租' : '待定'
-        addNotification({ type: 'success', message: `已確認${intentText}意向` })
-      } else {
-        addNotification({ type: 'error', message: data.message || '確認失敗' })
-      }
-    },
-    onError: (error) => {
-      addNotification({ type: 'error', message: `確認失敗: ${error.message}` })
-    }
-  })
-}
-
-export function useRenewalComplete() {
-  const queryClient = useQueryClient()
-  const addNotification = useStore((state) => state.addNotification)
-
-  return useMutation({
-    mutationFn: ({ renewalCaseId }) => renewal.complete(renewalCaseId),
-    onSuccess: (data) => {
-      if (data.success) {
-        queryClient.invalidateQueries({ queryKey: ['renewal-cases'] })
-        queryClient.invalidateQueries({ queryKey: ['contracts'] })
-        queryClient.invalidateQueries({ queryKey: ['renewals'] })
-        addNotification({ type: 'success', message: '續約流程已完成' })
-      } else {
-        addNotification({ type: 'error', message: data.message || '完成失敗' })
-      }
-    },
-    onError: (error) => {
-      addNotification({ type: 'error', message: `完成失敗: ${error.message}` })
-    }
-  })
-}
 
 // ============================================================================
 // Contract DDD Hooks (合約領域服務)
