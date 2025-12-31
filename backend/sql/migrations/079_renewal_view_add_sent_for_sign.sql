@@ -45,9 +45,9 @@ first_invoices AS (
     SELECT DISTINCT ON (contract_id)
         contract_id,
         invoice_number,
-        invoice_date,
-        carrier_type
+        invoice_date
     FROM invoices
+    WHERE status = 'issued'
     ORDER BY contract_id, invoice_date ASC
 )
 SELECT
@@ -143,7 +143,6 @@ SELECT
     -- 發票狀態（從 invoice 計算，SSOT）
     fi.invoice_number AS next_invoice_number,        -- ★ 新增
     fi.invoice_date AS next_invoice_date,            -- ★ 新增
-    fi.carrier_type AS next_invoice_carrier_type,    -- ★ 新增
     fi.invoice_number IS NOT NULL AS is_next_invoiced, -- ★ 新增
 
     -- 回簽狀態（從 next_contract 計算，SSOT）
