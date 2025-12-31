@@ -283,6 +283,18 @@ async def renewal_create_draft(
             "created_by": created_by
         })
 
+        # 8. 產生續約首期付款記錄
+        try:
+            payment_result = await postgrest_rpc("generate_renewal_payments", {
+                "p_contract_id": new_contract["id"],
+                "p_periods": 1  # 只產生首期
+            })
+            logger.info(f"續約草稿付款記錄已產生: {payment_result}")
+        except Exception as payment_error:
+            # 付款記錄產生失敗不影響草稿建立
+            logger.warning(f"續約草稿付款記錄產生失敗: {payment_error}")
+            payment_result = {"success": False, "error": str(payment_error)}
+
         return {
             "success": True,
             "draft_id": new_contract["id"],
@@ -304,6 +316,7 @@ async def renewal_create_draft(
                 "end_date": old_contract.get("end_date")
             },
             "idempotency_key": idempotency_key,
+            "payment_generated": payment_result.get("success", False) if isinstance(payment_result, dict) else False,
             "message": f"續約草稿已建立（第 {new_period} 期），請確認後啟用"
         }
 
