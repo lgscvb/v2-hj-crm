@@ -34,8 +34,11 @@ BEGIN
 END $$;
 
 -- ============================================================================
--- 2. 更新過期合約（排除有草稿的）
+-- 2. 暫時停用保護 trigger，更新過期合約
 -- ============================================================================
+
+-- 停用 trigger（資料修復專用）
+ALTER TABLE contracts DISABLE TRIGGER protect_contract_critical_fields_trigger;
 
 UPDATE contracts c
 SET status = 'expired',
@@ -48,6 +51,9 @@ WHERE c.status = 'active'
     WHERE nc.renewed_from_id = c.id
       AND nc.status IN ('draft', 'pending_sign')
   );
+
+-- 重新啟用 trigger
+ALTER TABLE contracts ENABLE TRIGGER protect_contract_critical_fields_trigger;
 
 -- ============================================================================
 -- 3. 驗證結果
