@@ -34,15 +34,18 @@ const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444']
 // 續約 Checklist 相關：從時間戳計算狀態
 // ============================================================================
 
-// ★ 2025-12-29 修正：is_paid 改用 first_payment_status（SSOT）
+// ★ 2025-12-31 重構：改用 v_renewal_reminders 的 SSOT 欄位
+// 已移除 deprecated 的 renewal_*_at 欄位
 function computeFlags(contract) {
   return {
-    is_notified: !!contract.renewal_notified_at,
-    is_confirmed: !!contract.renewal_confirmed_at,
-    // ★ 改用 is_first_payment_paid 或 first_payment_status（來自 v_renewal_reminders）
+    // is_notified/is_confirmed: 這些流程已不在 contracts 表追蹤
+    // 如果有 next_contract（續約草稿），視為已確認意向
+    is_notified: !!contract.next_contract_id || contract.days_remaining <= 60,
+    is_confirmed: !!contract.next_contract_id,
+    // 使用 v_renewal_reminders 的 SSOT 欄位
     is_paid: contract.is_first_payment_paid || contract.first_payment_status === 'paid',
-    is_signed: !!contract.renewal_signed_at,
-    is_invoiced: contract.invoice_status && contract.invoice_status !== 'pending_tax_id'
+    is_signed: contract.is_next_signed,
+    is_invoiced: contract.is_next_invoiced
   }
 }
 

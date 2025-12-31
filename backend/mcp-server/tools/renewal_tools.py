@@ -44,69 +44,28 @@ async def update_renewal_status(
     """
     [V1 已棄用] 更新合約的續約狀態
 
-    ⚠️ 此工具已棄用，V3 設計改為：
+    ⚠️ 此工具已完全停用（2025-12-31）
+    renewal_* 欄位已從資料庫清除，此工具不再執行任何操作。
+
+    替代方案：
     - 意願管理：使用 renewal_set_flag (notified/confirmed)
     - 收款：由 Payments 系統管理 (SSOT)
     - 簽約：由 renewal_create_draft + renewal_activate 管理
-
-    Args:
-        contract_id: 合約 ID
-        renewal_status: 新狀態 (notified/confirmed/paid/invoiced/signed/completed)
-        notes: 備註
-
-    Returns:
-        更新結果
     """
-    # V3 護欄：記錄棄用警告
-    logger.warning(f"[V1 已棄用] update_renewal_status 被呼叫，contract_id={contract_id}，renewal_status={renewal_status}")
+    # V3 護欄：完全阻擋，不再執行
+    logger.error(f"[V1 已停用] update_renewal_status 被呼叫但已停用，contract_id={contract_id}")
 
-    if renewal_status not in VALID_RENEWAL_STATUSES:
-        return {
-            "success": False,
-            "error": f"無效的狀態: {renewal_status}。有效值: {', '.join(VALID_RENEWAL_STATUSES)}"
-        }
-
-    # 準備更新資料
-    update_data = {
-        "renewal_status": renewal_status
+    return {
+        "success": False,
+        "error": "此工具已停用。renewal_* 欄位已從 SSOT 架構中移除。請使用 renewal_create_draft / renewal_activate 等 V3 工具。",
+        "deprecated": True,
+        "alternatives": [
+            "renewal_set_flag - 設定意願標記",
+            "renewal_create_draft - 建立續約草稿",
+            "renewal_activate - 啟用續約合約"
+        ]
     }
 
-    # 根據狀態更新對應的時間戳
-    now = datetime.now().isoformat()
-    status_timestamp_map = {
-        'notified': 'renewal_notified_at',
-        'confirmed': 'renewal_confirmed_at',
-        'paid': 'renewal_paid_at',
-        'invoiced': 'renewal_invoiced_at',
-        'signed': 'renewal_signed_at'
-    }
-
-    if renewal_status in status_timestamp_map:
-        update_data[status_timestamp_map[renewal_status]] = now
-
-    if notes:
-        update_data["renewal_notes"] = notes
-
-    try:
-        result = await postgrest_request(
-            "PATCH",
-            f"contracts?id=eq.{contract_id}",
-            data=update_data,
-            headers={"Prefer": "return=representation"}
-        )
-
-        return {
-            "success": True,
-            "contract_id": contract_id,
-            "new_status": renewal_status,
-            "updated_at": now
-        }
-    except Exception as e:
-        logger.error(f"更新續約狀態失敗: {e}")
-        return {
-            "success": False,
-            "error": str(e)
-        }
 
 
 async def update_invoice_status(
@@ -169,48 +128,19 @@ async def get_renewal_status_summary(
     branch_id: Optional[int] = None
 ) -> dict:
     """
-    取得續約狀態統計
+    [V1 已停用] 取得續約狀態統計
 
-    Args:
-        branch_id: 場館 ID（可選）
-
-    Returns:
-        各狀態的數量統計
+    ⚠️ 此工具已停用（2025-12-31）
+    renewal_status 欄位已清除，請改用 v_renewal_dashboard_stats
     """
-    params = {}
-    if branch_id:
-        params["branch_id"] = f"eq.{branch_id}"
+    logger.error(f"[V1 已停用] get_renewal_status_summary 被呼叫但已停用")
 
-    try:
-        result = await postgrest_request(
-            "GET",
-            "v_renewal_status_summary",
-            params=params
-        )
-
-        # 整理成更易讀的格式
-        summary = {}
-        for row in result or []:
-            status = row.get('renewal_status', 'none')
-            if status not in summary:
-                summary[status] = {
-                    "count": 0,
-                    "total_monthly_rent": 0
-                }
-            summary[status]["count"] += row.get('count', 0)
-            summary[status]["total_monthly_rent"] += row.get('total_monthly_rent', 0)
-
-        return {
-            "success": True,
-            "summary": summary,
-            "raw": result
-        }
-    except Exception as e:
-        logger.error(f"取得續約狀態統計失敗: {e}")
-        return {
-            "success": False,
-            "error": str(e)
-        }
+    return {
+        "success": False,
+        "error": "此工具已停用。請改用 v_renewal_dashboard_stats 視圖。",
+        "deprecated": True,
+        "alternative": "SELECT * FROM v_renewal_dashboard_stats"
+    }
 
 
 async def renewal_set_flag(
@@ -325,68 +255,16 @@ async def batch_update_renewal_status(
     notes: Optional[str] = None
 ) -> dict:
     """
-    批次更新多個合約的續約狀態
+    [V1 已停用] 批次更新多個合約的續約狀態
 
-    Args:
-        contract_ids: 合約 ID 列表
-        renewal_status: 新狀態
-        notes: 備註
-
-    Returns:
-        更新結果
+    ⚠️ 此工具已完全停用（2025-12-31）
+    renewal_* 欄位已從資料庫清除。
     """
-    if renewal_status not in VALID_RENEWAL_STATUSES:
-        return {
-            "success": False,
-            "error": f"無效的狀態: {renewal_status}"
-        }
+    logger.error(f"[V1 已停用] batch_update_renewal_status 被呼叫但已停用")
 
-    if not contract_ids:
-        return {
-            "success": False,
-            "error": "請提供至少一個合約 ID"
-        }
-
-    # 準備更新資料
-    update_data = {
-        "renewal_status": renewal_status
+    return {
+        "success": False,
+        "error": "此工具已停用。renewal_* 欄位已從 SSOT 架構中移除。",
+        "deprecated": True
     }
 
-    now = datetime.now().isoformat()
-    status_timestamp_map = {
-        'notified': 'renewal_notified_at',
-        'confirmed': 'renewal_confirmed_at',
-        'paid': 'renewal_paid_at',
-        'invoiced': 'renewal_invoiced_at',
-        'signed': 'renewal_signed_at'
-    }
-
-    if renewal_status in status_timestamp_map:
-        update_data[status_timestamp_map[renewal_status]] = now
-
-    if notes:
-        update_data["renewal_notes"] = notes
-
-    # 使用 PostgREST 的 in 語法批次更新
-    ids_str = ",".join(str(id) for id in contract_ids)
-
-    try:
-        result = await postgrest_request(
-            "PATCH",
-            f"contracts?id=in.({ids_str})",
-            data=update_data,
-            headers={"Prefer": "return=representation"}
-        )
-
-        return {
-            "success": True,
-            "updated_count": len(contract_ids),
-            "new_status": renewal_status,
-            "contract_ids": contract_ids
-        }
-    except Exception as e:
-        logger.error(f"批次更新續約狀態失敗: {e}")
-        return {
-            "success": False,
-            "error": str(e)
-        }

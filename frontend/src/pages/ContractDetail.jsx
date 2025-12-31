@@ -64,28 +64,23 @@ const BRANCHES = {
 // Checklist 相關：Computed Flags 和 Display Status
 // ============================================================================
 
-// 從時間戳計算 flags
-// ★ 2025-12-29 修正：is_paid 改從 payments 判斷，不再使用 deprecated 的 renewal_paid_at
-function computeFlags(contract, payments = []) {
-  // 找出第一筆租金付款是否已付（按 payment_period 排序）
-  const rentPayments = payments.filter(p => p.payment_type === 'rent')
-  const firstRentPayment = rentPayments.sort((a, b) =>
-    (a.payment_period || '').localeCompare(b.payment_period || '')
-  )[0]
-  const isFirstPaymentPaid = firstRentPayment?.payment_status === 'paid'
-
+// 從 workspace timeline 狀態計算 flags
+// ★ 2025-12-31 重構：改用 v_contract_workspace 的 timeline_*_status（SSOT）
+function computeFlags(contract) {
+  // 直接使用 workspace 計算好的 timeline 狀態
+  // 'done' = 完成, 'in_progress'/'pending' = 進行中, 'not_started' = 未開始
   return {
-    is_notified: !!contract.renewal_notified_at,
-    is_confirmed: !!contract.renewal_confirmed_at,
-    is_paid: isFirstPaymentPaid,  // ★ 改用 payments 數據（SSOT）
-    is_signed: !!contract.renewal_signed_at,
-    is_invoiced: contract.invoice_status && contract.invoice_status !== 'pending_tax_id'
+    is_notified: contract.timeline_intent_status && contract.timeline_intent_status !== 'not_started',
+    is_confirmed: contract.timeline_intent_status === 'done',
+    is_paid: contract.timeline_payment_status === 'done',
+    is_signed: contract.timeline_signing_status === 'done',
+    is_invoiced: contract.timeline_invoice_status === 'done'
   }
 }
 
 // 根據 flags 計算顯示狀態
-function getDisplayStatus(contract, payments = []) {
-  const flags = computeFlags(contract, payments)
+function getDisplayStatus(contract) {
+  const flags = computeFlags(contract)
 
   // 檢查是否全部完成
   const allDone = flags.is_notified && flags.is_confirmed &&
@@ -117,8 +112,8 @@ function getDisplayStatus(contract, payments = []) {
 // Checklist Popover 元件
 // ============================================================================
 
-function ChecklistPopover({ contract, payments = [], onUpdate, onSaveNotes, isUpdating, onClose }) {
-  const flags = computeFlags(contract, payments)
+function ChecklistPopover({ contract, onUpdate, onSaveNotes, isUpdating, onClose }) {
+  const flags = computeFlags(contract)
   const popoverRef = useRef(null)
   const [notes, setNotes] = useState(contract.renewal_notes || '')
   const [notesChanged, setNotesChanged] = useState(false)
