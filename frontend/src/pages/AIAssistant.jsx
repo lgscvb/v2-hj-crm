@@ -35,12 +35,19 @@ const WRITE_TOOLS = [
   'crm_payment_undo',
   'crm_create_contract',
   'commission_pay',
-  'renewal_update_status',
-  'renewal_batch_update',
+  // V3 意願管理
+  'set_renewal_intent',
+  'batch_set_renewal_intent',
+  // V3 續約交易
+  'renewal_create_draft',
+  'renewal_activate',
+  'renewal_cancel_draft',
+  'renewal_mark_signed',
   'line_send_message',
   'line_send_payment_reminder',
   'line_send_renewal_reminder',
   'invoice_create',
+  'invoice_create_v2',
   'invoice_void',
   'invoice_allowance',
   'contract_generate_pdf',
@@ -52,6 +59,7 @@ const WRITE_TOOLS = [
 
 // 工具名稱中文對照
 const TOOL_NAMES = {
+  // 客戶管理
   crm_search_customers: '搜尋客戶',
   crm_get_customer_detail: '取得客戶詳情',
   crm_list_payments_due: '查詢應收款',
@@ -61,23 +69,41 @@ const TOOL_NAMES = {
   crm_record_payment: '記錄繳費',
   crm_payment_undo: '撤銷繳費',
   crm_create_contract: '建立合約',
+  // 佣金
   commission_pay: '佣金付款',
-  renewal_update_status: '更新續約狀態',
-  renewal_update_invoice_status: '更新發票狀態',
-  renewal_get_summary: '取得續約統計',
-  renewal_batch_update: '批次更新續約',
+  // V3 意願管理
+  set_renewal_intent: '設定續約意願',
+  batch_set_renewal_intent: '批次設定續約意願',
+  get_renewal_intent: '取得續約意願',
+  list_pending_intents: '列出待處理意願',
+  renewal_set_flag: '設定續約 Flag（Alias）',
+  // V3 續約交易
+  renewal_check_draft: '檢查續約草稿',
+  renewal_create_draft: '建立續約草稿',
+  renewal_update_draft: '更新續約草稿',
+  renewal_activate: '啟用續約',
+  renewal_cancel_draft: '取消續約草稿',
+  renewal_send_for_sign: '發送簽約',
+  renewal_mark_signed: '標記已簽約',
+  renewal_send_sign_reminder: '發送簽約提醒',
+  // LINE
   line_send_message: '發送 LINE 訊息',
   line_send_payment_reminder: '發送繳費提醒',
   line_send_renewal_reminder: '發送續約提醒',
+  // 報表
   report_revenue_summary: '營收報表',
   report_overdue_list: '逾期款報表',
   report_commission_due: '佣金報表',
-  invoice_create: '開立發票',
+  // 發票
+  invoice_create: '開立發票（V1）',
+  invoice_create_v2: '開立發票',
   invoice_void: '作廢發票',
   invoice_query: '查詢發票',
   invoice_allowance: '開立折讓單',
+  // 合約
   contract_generate_pdf: '生成合約 PDF',
   contract_preview: '預覽合約',
+  // 會議室
   booking_list_rooms: '列出會議室',
   booking_check_availability: '查詢可用時段',
   booking_create: '建立會議室預約',
