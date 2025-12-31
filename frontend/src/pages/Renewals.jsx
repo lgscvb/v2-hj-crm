@@ -38,55 +38,72 @@ import {
 // Checklist 相關：Computed Flags 和 Display Status
 // ============================================================================
 //
-// V3 設計（SSOT）：
-// - 可勾選：已通知、已確認（意願管理）
-// - 唯讀顯示：已收款、已開票（從 payment/invoice 計算）
-// - 已移除：已簽約（去待簽列表追蹤）
+// V3.1 設計（SSOT + 完整流程）：
+// - 意願管理：已通知、已確認（可手動勾選）
+// - 合約建立：建立草稿、發送簽署、客戶回簽（唯讀，從 next_contract 計算）
+// - 財務完成：款項收取、發票開立（唯讀，從 payment/invoice 計算）
 //
-// 欄位來源：
-// - is_notified: renewal_notified_at（可寫入）
-// - is_confirmed: renewal_confirmed_at（可寫入）
-// - is_paid: is_first_payment_paid（從視圖計算，SSOT）
-// - is_invoiced: first_payment_status 或 invoice_status
+// 7 步驟流程：
+// 1. 通知客戶 - renewal_notified_at
+// 2. 確認續約意願 - renewal_confirmed_at
+// 3. 建立續約草稿 - has_renewal_draft / next_contract_id
+// 4. 發送簽署 - is_sent_for_sign / next_sent_for_sign_at
+// 5. 客戶回簽 - is_next_signed / next_signed_at
+// 6. 款項收取 - is_first_payment_paid（NEW contract's first payment）
+// 7. 發票開立 - is_next_invoiced（NEW contract's invoice）
 // ============================================================================
 
-// 從視圖欄位計算 flags（V3 SSOT 設計）
-// ★ 2025-12-29 修正：is_paid 改用 first_payment_status（SSOT），不再使用 deprecated 的 renewal_paid_at
+// 從視圖欄位計算 flags（V3.1 完整流程）
 function computeFlags(contract) {
   return {
-    // 可手動更新的意願管理欄位
+    // 意願管理（可手動更新）
     is_notified: !!contract.renewal_notified_at,
     is_confirmed: !!contract.renewal_confirmed_at,
-    // 唯讀：從 payment/invoice 計算（SSOT）
-    // ★ 改用 is_first_payment_paid 或 first_payment_status
+
+    // 合約建立（唯讀，從 next_contract 計算）
+    has_draft: !!contract.has_renewal_draft || !!contract.next_contract_id,
+    is_sent_for_sign: !!contract.is_sent_for_sign || !!contract.next_sent_for_sign_at,
+    is_signed: !!contract.is_next_signed || !!contract.next_signed_at,
+
+    // 財務完成（唯讀，從 payment/invoice 計算）
     is_paid: contract.is_first_payment_paid || contract.first_payment_status === 'paid',
-    is_invoiced: contract.invoice_status && contract.invoice_status !== 'pending_tax_id'
-    // is_signed 已移除，簽約狀態改由待簽列表追蹤
+    is_invoiced: contract.is_next_invoiced ||
+      (contract.invoice_status && contract.invoice_status !== 'pending_tax_id')
   }
 }
 
-// 根據 flags 計算顯示狀態（4 項，不含已簽約）
+// 根據 flags 計算顯示狀態（7 步驟）
 function getDisplayStatus(contract) {
   const flags = computeFlags(contract)
 
-  // 檢查意願管理是否完成（通知 + 確認）
-  const intentDone = flags.is_notified && flags.is_confirmed
-  // 檢查財務是否完成（收款 + 開票）
-  const financeDone = flags.is_paid && flags.is_invoiced
-  // 全部完成 = 意願 + 財務
-  const allDone = intentDone && financeDone
+  // 計算完成的步驟數
+  const completedSteps = [
+    flags.is_notified,
+    flags.is_confirmed,
+    flags.has_draft,
+    flags.is_sent_for_sign,
+    flags.is_signed,
+    flags.is_paid,
+    flags.is_invoiced
+  ].filter(Boolean).length
 
-  if (allDone) return { label: '可建立續約', stage: 'ready', progress: 4, issues: [] }
+  // 全部完成
+  if (completedSteps === 7) {
+    return { label: '已完成', stage: 'ready', progress: 7, issues: [] }
+  }
 
-  // 檢查是否尚未開始
-  const noneStarted = !flags.is_notified && !flags.is_confirmed &&
-    !flags.is_paid && !flags.is_invoiced
-  if (noneStarted) return { label: '待處理', stage: 'pending', progress: 0, issues: ['全部待處理'] }
+  // 尚未開始
+  if (completedSteps === 0) {
+    return { label: '待處理', stage: 'pending', progress: 0, issues: ['全部待處理'] }
+  }
 
-  // 收集缺漏項目（4 項）
+  // 收集缺漏項目
   const issues = []
   if (!flags.is_notified) issues.push('未通知')
   if (!flags.is_confirmed) issues.push('未確認')
+  if (!flags.has_draft) issues.push('未建草稿')
+  if (!flags.is_sent_for_sign) issues.push('未送簽')
+  if (!flags.is_signed) issues.push('未回簽')
   if (!flags.is_paid) issues.push('未收款')
   if (!flags.is_invoiced) issues.push('未開票')
 
@@ -94,17 +111,19 @@ function getDisplayStatus(contract) {
     label: '進行中',
     stage: 'in_progress',
     issues,
-    progress: 4 - issues.length
+    progress: completedSteps
   }
 }
 
 // 建構 ProcessTimeline 步驟（用於續約進度 Modal）
+// V3.1：7 步驟完整流程
 function buildRenewalTimelineSteps(contract) {
   if (!contract) return []
 
   const flags = computeFlags(contract)
 
   return [
+    // === 意願管理 ===
     {
       key: 'notify',
       label: '通知客戶',
@@ -122,13 +141,46 @@ function buildRenewalTimelineSteps(contract) {
         completed_at: contract.renewal_confirmed_at
       } : null
     },
+
+    // === 合約建立 ===
+    {
+      key: 'draft',
+      label: '建立續約草稿',
+      status: flags.has_draft ? 'done' :
+        (flags.is_confirmed ? 'pending' : 'not_started'),
+      details: flags.has_draft ? {
+        completed_at: contract.next_created_at,
+        note: contract.next_contract_id ? `草稿 #${contract.next_contract_id}` : null
+      } : null
+    },
+    {
+      key: 'send_sign',
+      label: '發送簽署',
+      status: flags.is_sent_for_sign ? 'done' :
+        (flags.has_draft ? 'pending' : 'not_started'),
+      details: flags.is_sent_for_sign ? {
+        completed_at: contract.next_sent_for_sign_at || contract.signing_start_at
+      } : null
+    },
+    {
+      key: 'signed',
+      label: '客戶回簽',
+      status: flags.is_signed ? 'done' :
+        (flags.is_sent_for_sign ? 'pending' : 'not_started'),
+      details: flags.is_signed ? {
+        completed_at: contract.next_signed_at
+      } : (contract.days_pending_sign > 7 ? {
+        note: `等待 ${contract.days_pending_sign} 天`
+      } : null)
+    },
+
+    // === 財務完成 ===
     {
       key: 'payment',
       label: '款項收取',
       status: flags.is_paid ? 'done' :
-        (flags.is_confirmed ? 'pending' : 'not_started'),
+        (flags.has_draft ? 'pending' : 'not_started'),
       details: flags.is_paid ? {
-        // ★ 2025-12-29 修正：優先使用 first_payment_paid_at（SSOT）
         completed_at: contract.first_payment_paid_at,
         note: contract.first_payment_method || null
       } : null
@@ -139,8 +191,8 @@ function buildRenewalTimelineSteps(contract) {
       status: flags.is_invoiced ? 'done' :
         (flags.is_paid ? 'pending' : 'not_started'),
       details: flags.is_invoiced ? {
-        completed_at: contract.invoice_date,
-        note: contract.invoice_number || null
+        completed_at: contract.next_invoice_date || contract.invoice_date,
+        note: contract.next_invoice_number || contract.invoice_number || null
       } : (contract.invoice_status === 'pending_tax_id' ? {
         note: '等待客戶提供統編'
       } : null)
@@ -152,8 +204,14 @@ function buildRenewalTimelineSteps(contract) {
 function getCurrentTimelineStep(contract) {
   const flags = computeFlags(contract)
 
+  // 意願管理
   if (!flags.is_notified) return 'notify'
   if (!flags.is_confirmed) return 'confirm'
+  // 合約建立
+  if (!flags.has_draft) return 'draft'
+  if (!flags.is_sent_for_sign) return 'send_sign'
+  if (!flags.is_signed) return 'signed'
+  // 財務完成
   if (!flags.is_paid) return 'payment'
   if (!flags.is_invoiced) return 'invoice'
   return null  // 全部完成
@@ -228,14 +286,47 @@ function ChecklistPopover({ contract, onUpdate, isUpdating }) {
     { key: 'confirmed', label: '已確認', icon: CheckCircle, checked: flags.is_confirmed, timestamp: contract.renewal_confirmed_at },
   ]
 
-  // 唯讀顯示的財務狀態（從 payment/invoice 計算，SSOT）
-  const readonlyItems = [
+  // 合約建立步驟（唯讀）
+  const contractItems = [
+    {
+      key: 'draft',
+      label: '已建草稿',
+      icon: FilePlus,
+      checked: flags.has_draft,
+      hint: flags.has_draft ? `#${contract.next_contract_id}` : '→ 建立續約'
+    },
+    {
+      key: 'sent',
+      label: '已送簽',
+      icon: Send,
+      checked: flags.is_sent_for_sign,
+      hint: flags.is_sent_for_sign ? '（已發送）' : '→ 發送簽署'
+    },
+    {
+      key: 'signed',
+      label: '已回簽',
+      icon: PenTool,
+      checked: flags.is_signed,
+      hint: flags.is_signed ? '（已簽約）' :
+        (contract.days_pending_sign > 7 ? `等待 ${contract.days_pending_sign} 天` : '→ 等待回簽')
+    },
+  ]
+
+  // 財務完成步驟（唯讀）
+  const financeItems = [
     {
       key: 'paid',
       label: '已收款',
       icon: Receipt,
       checked: flags.is_paid,
       hint: flags.is_paid ? '（付款管理）' : '→ 付款管理'
+    },
+    {
+      key: 'invoiced',
+      label: '已開票',
+      icon: FileText,
+      checked: flags.is_invoiced,
+      hint: flags.is_invoiced ? '（發票系統）' : '→ 發票系統'
     },
   ]
 
@@ -249,9 +340,27 @@ function ChecklistPopover({ contract, onUpdate, isUpdating }) {
     })
   }
 
+  // 渲染唯讀項目
+  const renderReadonlyItem = ({ key, label, icon: Icon, checked, hint }) => (
+    <div key={key} className="flex items-center justify-between">
+      <div className="flex items-center gap-2 flex-1">
+        <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+          checked ? 'bg-green-500 border-green-500' : 'border-gray-300 bg-gray-100'
+        }`}>
+          {checked && <Check className="w-3 h-3 text-white" />}
+        </div>
+        <Icon className={`w-4 h-4 ${checked ? 'text-green-500' : 'text-gray-400'}`} />
+        <span className={`text-sm ${checked ? 'text-gray-900' : 'text-gray-500'}`}>
+          {label}
+        </span>
+      </div>
+      <span className="text-xs text-gray-400">{hint}</span>
+    </div>
+  )
+
   return (
-    <div className="p-3 min-w-[260px]">
-      <h4 className="font-medium text-gray-900 mb-3 pb-2 border-b">續約進度 Checklist</h4>
+    <div className="p-3 min-w-[280px]">
+      <h4 className="font-medium text-gray-900 mb-3 pb-2 border-b">續約進度 Checklist（7 步驟）</h4>
 
       {/* 意願管理（可勾選） */}
       <div className="space-y-2 mb-3">
@@ -278,63 +387,38 @@ function ChecklistPopover({ contract, onUpdate, isUpdating }) {
         ))}
       </div>
 
-      {/* 財務狀態（唯讀顯示） */}
+      {/* 合約建立（唯讀） */}
       <div className="pt-2 mt-2 border-t space-y-2">
-        <div className="text-xs text-gray-400 mb-1">財務狀態（唯讀）</div>
-        {readonlyItems.map(({ key, label, icon: Icon, checked, hint }) => (
-          <div key={key} className="flex items-center justify-between">
-            <div className="flex items-center gap-2 flex-1">
-              <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                checked ? 'bg-green-500 border-green-500' : 'border-gray-300 bg-gray-100'
-              }`}>
-                {checked && <Check className="w-3 h-3 text-white" />}
-              </div>
-              <Icon className={`w-4 h-4 ${checked ? 'text-green-500' : 'text-gray-400'}`} />
-              <span className={`text-sm ${checked ? 'text-gray-900' : 'text-gray-500'}`}>
-                {label}
-              </span>
-            </div>
-            <span className="text-xs text-gray-400">{hint}</span>
-          </div>
-        ))}
+        <div className="text-xs text-gray-400 mb-1">合約建立（唯讀）</div>
+        {contractItems.map(renderReadonlyItem)}
+      </div>
 
-        {/* 發票狀態 */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 flex-1">
-            <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-              flags.is_invoiced ? 'bg-green-500 border-green-500' : 'border-gray-300 bg-gray-100'
-            }`}>
-              {flags.is_invoiced && <Check className="w-3 h-3 text-white" />}
-            </div>
-            <FileText className={`w-4 h-4 ${flags.is_invoiced ? 'text-green-500' : 'text-gray-400'}`} />
-            <span className={`text-sm ${flags.is_invoiced ? 'text-gray-900' : 'text-gray-500'}`}>
-              已開票
-            </span>
-          </div>
-          <span className="text-xs text-gray-400">
-            {flags.is_invoiced ? '（發票系統）' : '→ 發票系統'}
-          </span>
-        </div>
+      {/* 財務完成（唯讀） */}
+      <div className="pt-2 mt-2 border-t space-y-2">
+        <div className="text-xs text-gray-400 mb-1">財務完成（唯讀）</div>
+        {financeItems.map(renderReadonlyItem)}
 
         {/* 發票狀態選擇（暫時保留操作，過渡期） */}
-        <div className="ml-6 mt-1">
-          <div className="grid grid-cols-2 gap-1">
-            {Object.entries(INVOICE_STATUSES).map(([key, { label }]) => (
-              <button
-                key={key}
-                onClick={() => onUpdate('invoice', key)}
-                disabled={isUpdating}
-                className={`text-xs px-2 py-1 rounded ${
-                  contract.invoice_status === key
-                    ? 'bg-green-100 text-green-700 font-medium'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+        {!flags.is_invoiced && (
+          <div className="ml-6 mt-1">
+            <div className="grid grid-cols-2 gap-1">
+              {Object.entries(INVOICE_STATUSES).map(([key, { label }]) => (
+                <button
+                  key={key}
+                  onClick={() => onUpdate('invoice', key)}
+                  disabled={isUpdating}
+                  className={`text-xs px-2 py-1 rounded ${
+                    contract.invoice_status === key
+                      ? 'bg-green-100 text-green-700 font-medium'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {isUpdating && (
@@ -355,7 +439,7 @@ function ProgressBar({ progress, stage, onClick }) {
   const colors = {
     pending: 'bg-gray-200',
     in_progress: 'bg-blue-500',
-    ready: 'bg-green-500'  // 可建立續約
+    ready: 'bg-green-500'  // 已完成
   }
 
   return (
@@ -364,18 +448,18 @@ function ProgressBar({ progress, stage, onClick }) {
       className="flex items-center gap-2 group"
     >
       <div className="flex gap-0.5">
-        {/* 4 格進度條（已通知、已確認、已收款、已開票） */}
-        {[...Array(4)].map((_, i) => (
+        {/* 7 格進度條：通知、確認、草稿、送簽、回簽、收款、開票 */}
+        {[...Array(7)].map((_, i) => (
           <div
             key={i}
-            className={`w-2 h-4 rounded-sm transition-colors ${
+            className={`w-1.5 h-4 rounded-sm transition-colors ${
               i < progress ? colors[stage] : 'bg-gray-200'
             }`}
           />
         ))}
       </div>
       <span className="text-xs text-gray-500 group-hover:text-gray-700">
-        {progress}/4
+        {progress}/7
       </span>
       <ChevronDown className="w-3 h-3 text-gray-400 group-hover:text-gray-600" />
     </button>
@@ -1300,31 +1384,57 @@ export default function Renewals() {
 
             {/* 建立續約 / 不續約按鈕 */}
             <div className="pt-4 border-t space-y-3">
-              {/* 建立續約按鈕 - Checklist 完成後顯示 */}
+              {/* 建立續約按鈕 - 根據流程狀態顯示不同內容 */}
               {(() => {
                 const flags = computeFlags(selectedContract)
-                const allDone = flags.is_notified && flags.is_confirmed &&
-                  flags.is_paid && flags.is_invoiced && flags.is_signed
-                return allDone ? (
-                  <button
-                    onClick={openRenewalDraftModal}
-                    className="w-full py-3 px-4 bg-green-50 border border-green-200 rounded-lg text-green-700 hover:bg-green-100 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <FilePlus className="w-5 h-5" />
-                    建立續約合約
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </button>
-                ) : (
+                const intentDone = flags.is_notified && flags.is_confirmed
+
+                // 已有草稿，導向草稿
+                if (flags.has_draft) {
+                  return (
+                    <button
+                      onClick={() => navigate(`/contracts/${selectedContract.next_contract_id}`)}
+                      className="w-full py-3 px-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 hover:bg-blue-100 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <FileText className="w-5 h-5" />
+                      查看續約草稿 #{selectedContract.next_contract_id}
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </button>
+                  )
+                }
+
+                // 意願確認完成，可建立草稿
+                if (intentDone) {
+                  return (
+                    <button
+                      onClick={openRenewalDraftModal}
+                      className="w-full py-3 px-4 bg-green-50 border border-green-200 rounded-lg text-green-700 hover:bg-green-100 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <FilePlus className="w-5 h-5" />
+                      建立續約草稿
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </button>
+                  )
+                }
+
+                // 尚未確認意願
+                return (
                   <div className="p-3 bg-gray-50 rounded-lg text-center">
                     <p className="text-sm text-gray-500">
-                      完成所有 Checklist 項目後即可建立續約合約
+                      請先完成「通知客戶」和「確認續約意願」後建立續約草稿
                     </p>
                   </div>
                 )
               })()}
 
+              {/* 不續約按鈕 - 需要二次確認 */}
               <button
-                onClick={() => setShowNotRenewModal(true)}
+                onClick={() => {
+                  // 二次確認防呆
+                  if (window.confirm('確定要標記此合約為「不續約」嗎？\n\n此操作將建立解約案件並進入解約流程。')) {
+                    setShowNotRenewModal(true)
+                  }
+                }}
                 className="w-full py-3 px-4 bg-red-50 border border-red-200 rounded-lg text-red-700 hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
               >
                 <XCircle className="w-5 h-5" />
