@@ -265,7 +265,7 @@ const CYCLE_LABEL = {
   biennial: '兩年繳'
 }
 
-// 計算當期金額（支援階梯式收費）
+// 計算當期金額（支援階梯式收費）- 用於顯示現有合約金額
 const getPeriodAmount = (row) => {
   let monthlyRent = row.monthly_rent || 0
 
@@ -283,6 +283,16 @@ const getPeriodAmount = (row) => {
 
   const multiplier = CYCLE_MULTIPLIER[row.payment_cycle] || 1
   return monthlyRent * multiplier
+}
+
+// ★ 101 新增：計算續約金額（LINE 提醒用）
+// 優先使用續約草稿條款，無草稿時 fallback 到現有合約
+const getRenewalPeriodAmount = (row) => {
+  // 如果有續約草稿，用新合約條款
+  const monthlyRent = row.next_monthly_rent || row.monthly_rent || 0
+  const paymentCycle = row.next_payment_cycle || row.payment_cycle || 'monthly'
+  const multiplier = CYCLE_MULTIPLIER[paymentCycle] || 1
+  return { amount: monthlyRent * multiplier, cycle: paymentCycle }
 }
 
 // ============================================================================
@@ -821,17 +831,33 @@ export default function Renewals() {
       }
     },
     {
-      key: 'invoice_status',
+      key: 'invoice',
       header: '發票',
-      accessor: 'invoice_status',
+      accessor: 'next_invoice_number',
+      // ★ 101 修正：改用 SSOT（payments.invoice_number）
       cell: (row) => {
-        if (!row.invoice_status) return <span className="text-gray-400">-</span>
-        const statusInfo = INVOICE_STATUSES[row.invoice_status]
-        return (
-          <Badge variant={statusInfo?.color}>
-            {statusInfo?.label}
-          </Badge>
-        )
+        // 優先顯示發票號碼
+        if (row.next_invoice_number) {
+          return (
+            <span className="text-green-600 font-medium text-xs">
+              {row.next_invoice_number}
+            </span>
+          )
+        }
+        // 無續約草稿 → 不適用
+        if (!row.has_renewal_draft) {
+          return <span className="text-gray-300">-</span>
+        }
+        // 有草稿但客戶缺統編 → 等待統編
+        if (!row.customer_company_tax_id) {
+          return (
+            <Badge variant="yellow">
+              等待統編
+            </Badge>
+          )
+        }
+        // 其他：待開票
+        return <span className="text-gray-400">-</span>
       }
     },
     {
@@ -894,9 +920,10 @@ export default function Renewals() {
               onClick={(e) => {
                 e.stopPropagation()
                 setSelectedContract(row)
-                const periodAmount = getPeriodAmount(row)
-                const cycleLabel = CYCLE_LABEL[row.payment_cycle] || ''
-                setReminderText(`您好，提醒您合約 ${row.contract_number} 將於 ${row.end_date} 到期，續約金額為 $${periodAmount.toLocaleString()}（${cycleLabel}），請問是否需要續約？`)
+                // ★ 101：使用續約草稿條款（有則用新、無則用舊）
+                const { amount, cycle } = getRenewalPeriodAmount(row)
+                const cycleLabel = CYCLE_LABEL[cycle] || ''
+                setReminderText(`您好，提醒您合約 ${row.contract_number} 將於 ${row.end_date} 到期，續約金額為 $${amount.toLocaleString()}（${cycleLabel}），請問是否需要續約？`)
                 setShowReminderModal(true)
               }}
               className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
@@ -1182,9 +1209,10 @@ export default function Renewals() {
                           <button
                             onClick={() => {
                               setSelectedContract(item)
-                              const periodAmount = getPeriodAmount(item)
-                              const cycleLabel = CYCLE_LABEL[item.payment_cycle] || ''
-                              setReminderText(`您好，提醒您合約 ${item.contract_number} 將於 ${item.end_date} 到期，續約金額為 $${periodAmount.toLocaleString()}（${cycleLabel}），請問是否需要續約？`)
+                              // ★ 101：使用續約草稿條款
+                              const { amount, cycle } = getRenewalPeriodAmount(item)
+                              const cycleLabel = CYCLE_LABEL[cycle] || ''
+                              setReminderText(`您好，提醒您合約 ${item.contract_number} 將於 ${item.end_date} 到期，續約金額為 $${amount.toLocaleString()}（${cycleLabel}），請問是否需要續約？`)
                               setShowReminderModal(true)
                             }}
                             className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200"
@@ -1279,9 +1307,10 @@ export default function Renewals() {
                 </label>
                 <button
                   onClick={() => {
-                    const periodAmount = getPeriodAmount(selectedContract)
-                    const cycleLabel = CYCLE_LABEL[selectedContract.payment_cycle] || ''
-                    setReminderText(`您好，提醒您合約 ${selectedContract.contract_number} 將於 ${selectedContract.end_date} 到期，續約金額為 $${periodAmount.toLocaleString()}（${cycleLabel}），請問是否需要續約？`)
+                    // ★ 101：使用續約草稿條款
+                    const { amount, cycle } = getRenewalPeriodAmount(selectedContract)
+                    const cycleLabel = CYCLE_LABEL[cycle] || ''
+                    setReminderText(`您好，提醒您合約 ${selectedContract.contract_number} 將於 ${selectedContract.end_date} 到期，續約金額為 $${amount.toLocaleString()}（${cycleLabel}），請問是否需要續約？`)
                   }}
                   className="text-xs text-blue-600 hover:underline"
                 >

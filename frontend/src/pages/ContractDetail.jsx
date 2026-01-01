@@ -65,21 +65,23 @@ const BRANCHES = {
 // ============================================================================
 
 // 從 workspace View 計算 flags（7 步驟模型）
-// ★ 2026-01-01 修復：對齊 Renewals.jsx 的 7 步驟（SSOT）
+// ★ 101 修正：同步 NULL 語意（無續約草稿時 is_paid/is_invoiced = null = 不適用）
 function computeFlags(contract) {
+  const has_draft = !!contract.has_renewal_draft
+
   return {
     // 意願管理
     is_notified: !!contract.is_notified,
     is_confirmed: !!contract.is_confirmed,
 
     // 合約建立
-    has_draft: !!contract.has_renewal_draft,
+    has_draft,
     is_sent_for_sign: !!contract.is_sent_for_sign,
     is_signed: !!contract.is_signed,
 
-    // 財務完成
-    is_paid: !!contract.is_paid,
-    is_invoiced: !!contract.is_invoiced
+    // 財務完成（★ 無續約草稿時為 null = 不適用）
+    is_paid: has_draft ? !!contract.is_paid : null,
+    is_invoiced: has_draft ? !!contract.is_invoiced : null
   }
 }
 
@@ -109,14 +111,15 @@ function getDisplayStatus(contract) {
   }
 
   // 收集缺漏項目
+  // ★ 101 修正：is_paid/is_invoiced = null 時（無續約草稿）不列為缺漏
   const issues = []
   if (!flags.is_notified) issues.push('未通知')
   if (!flags.is_confirmed) issues.push('未確認')
   if (!flags.has_draft) issues.push('未建草稿')
   if (!flags.is_sent_for_sign) issues.push('未送簽')
   if (!flags.is_signed) issues.push('未簽約')
-  if (!flags.is_paid) issues.push('未收款')
-  if (!flags.is_invoiced) issues.push('未開票')
+  if (flags.is_paid === false) issues.push('未收款')      // null = 不適用，不列入
+  if (flags.is_invoiced === false) issues.push('未開票')  // null = 不適用，不列入
 
   return {
     label: '進行中',
@@ -160,8 +163,17 @@ function ChecklistPopover({ contract, onUpdate, onSaveNotes, isUpdating, onClose
   ]
 
   // V3 設計：唯讀顯示的財務狀態（SSOT，從 payment 計算）
+  // ★ 101 修正：無續約草稿時（null）顯示「不適用」
   const readonlyItems = [
-    { key: 'paid', label: '已收款', icon: Receipt, checked: flags.is_paid, hint: flags.is_paid ? '（付款管理）' : '→ 付款管理' },
+    {
+      key: 'paid',
+      label: '已收款',
+      icon: Receipt,
+      checked: flags.is_paid === true,
+      disabled: flags.is_paid === null,
+      hint: flags.is_paid === null ? '（尚無續約草稿）' :
+        (flags.is_paid ? '（付款管理）' : '→ 付款管理')
+    },
   ]
 
   const formatTime = (ts) => {
