@@ -80,8 +80,9 @@ export default function MonthlyPayments() {
       if (selectedBranch) {
         params.branch_id = `eq.${selectedBranch}`
       }
-      const response = await api.get('/api/db/payments', { params })
-      return response.data || []
+      // api.js 攔截器已回傳 response.data，這裡直接用 response
+      const data = await api.get('/api/db/payments', { params })
+      return data || []
     }
   })
 
