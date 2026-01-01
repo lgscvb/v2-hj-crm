@@ -77,19 +77,21 @@ const getActionHandler = (processKey, actionKey) => {
         })
       },
 
-      // 設定續約意願
+      // 設定續約意願（value 預設 true，可從 payload 覆蓋）
       SET_CONFIRMED: async (contractId, payload) => {
         return callTool('renewal_set_flag', {
           contract_id: contractId,
-          flag_type: 'confirmed'
+          flag: 'confirmed',
+          value: payload?.value !== undefined ? payload.value : true
         })
       },
 
-      // 設定已通知
+      // 設定已通知（value 預設 true，可從 payload 覆蓋）
       SET_NOTIFIED: async (contractId, payload) => {
         return callTool('renewal_set_flag', {
           contract_id: contractId,
-          flag_type: 'notified'
+          flag: 'notified',
+          value: payload?.value !== undefined ? payload.value : true
         })
       },
 
@@ -114,12 +116,12 @@ const getActionHandler = (processKey, actionKey) => {
       },
 
       // 記錄收款（使用 crm_record_payment）
+      // ★ 2025-01-01 修復：移除 paid_at/payment_reference，改用 notes
       RECORD_PAYMENT: async (paymentId, payload) => {
         return callTool('crm_record_payment', {
           payment_id: paymentId,
           payment_method: payload.payment_method,
-          paid_at: payload.paid_at,
-          payment_reference: payload.payment_reference
+          notes: payload.payment_reference || payload.notes || null
         })
       },
 

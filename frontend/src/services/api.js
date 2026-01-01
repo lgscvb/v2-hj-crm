@@ -421,13 +421,13 @@ export const crm = {
   },
 
   async getContractDetail(contractId) {
-    // 取得合約詳情（含客戶資訊和繳費記錄）
+    // 取得合約詳情（使用 v_contract_workspace 取得 SSOT 資料）
+    // ★ 2025-01-01 重構：改用 v_contract_workspace 取得 timeline_* 欄位
     try {
-      // 取得合約基本資料
-      const contractData = await api.get('/api/db/contracts', {
+      // 取得合約工作台資料（含客戶、場館、timeline 狀態）
+      const contractData = await api.get('/api/db/v_contract_workspace', {
         params: {
-          id: `eq.${contractId}`,
-          select: '*,customers(*),branches(name)'
+          id: `eq.${contractId}`
         }
       })
       const contractArr = ensureArray(contractData)
@@ -446,12 +446,29 @@ export const crm = {
         }
       })
 
+      // 組裝客戶和場館資訊（從 workspace 欄位映射）
+      const customer = {
+        id: contract.customer_id,
+        name: contract.customer_name,
+        company_name: contract.customer_company_name,
+        phone: contract.customer_phone,
+        email: contract.customer_email,
+        line_user_id: contract.line_user_id,
+        status: contract.customer_status
+      }
+
+      const branch = {
+        id: contract.branch_id,
+        code: contract.branch_code,
+        name: contract.branch_name
+      }
+
       return {
         success: true,
         data: {
           contract,
-          customer: contract.customers,
-          branch: contract.branches,
+          customer,
+          branch,
           payments: ensureArray(rawPayments)
         }
       }
