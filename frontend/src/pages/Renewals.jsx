@@ -57,20 +57,24 @@ import {
 // ============================================================================
 
 // 直接從 View 取得 flags（SSOT）
+// ★ 100 修正：is_paid/is_invoiced 保留 null 語意（無續約草稿時為 null = 不適用）
 function getFlags(contract) {
+  const has_draft = !!contract.has_renewal_draft
+
   return {
     // 意願管理（View 已計算）
     is_notified: !!contract.is_notified,
     is_confirmed: !!contract.is_confirmed,
 
     // 合約建立（View 已計算）
-    has_draft: !!contract.has_renewal_draft,
+    has_draft,
     is_sent_for_sign: !!contract.is_sent_for_sign,
     is_signed: !!contract.is_signed,
 
     // 財務完成（View 已計算）
-    is_paid: !!contract.is_paid,
-    is_invoiced: !!contract.is_invoiced
+    // ★ 無續約草稿時為 null（不適用），有草稿時為 true/false
+    is_paid: has_draft ? !!contract.is_paid : null,
+    is_invoiced: has_draft ? !!contract.is_invoiced : null
   }
 }
 
@@ -103,14 +107,15 @@ function getDisplayStatus(contract) {
   }
 
   // 收集缺漏項目
+  // ★ 100 修正：is_paid/is_invoiced 為 null 時（無續約草稿）不列為缺漏
   const issues = []
   if (!flags.is_notified) issues.push('未通知')
   if (!flags.is_confirmed) issues.push('未確認')
   if (!flags.has_draft) issues.push('未建草稿')
   if (!flags.is_sent_for_sign) issues.push('未送簽')
   if (!flags.is_signed) issues.push('未回簽')
-  if (!flags.is_paid) issues.push('未收款')
-  if (!flags.is_invoiced) issues.push('未開票')
+  if (flags.is_paid === false) issues.push('未收款')      // null = 不適用，不列入
+  if (flags.is_invoiced === false) issues.push('未開票')  // null = 不適用，不列入
 
   return {
     label: '進行中',
@@ -180,11 +185,12 @@ function buildRenewalTimelineSteps(contract) {
     },
 
     // === 財務完成 ===
+    // ★ 100 修正：無續約草稿時（is_paid/is_invoiced = null）顯示 'n/a'
     {
       key: 'payment',
       label: '款項收取',
-      status: flags.is_paid ? 'done' :
-        (flags.has_draft ? 'pending' : 'not_started'),
+      status: flags.is_paid === null ? 'n/a' :
+        (flags.is_paid ? 'done' : 'pending'),
       details: flags.is_paid ? {
         completed_at: contract.first_payment_paid_at,
         note: contract.first_payment_method || null
@@ -193,8 +199,8 @@ function buildRenewalTimelineSteps(contract) {
     {
       key: 'invoice',
       label: '發票開立',
-      status: flags.is_invoiced ? 'done' :
-        (flags.is_paid ? 'pending' : 'not_started'),
+      status: flags.is_invoiced === null ? 'n/a' :
+        (flags.is_invoiced ? 'done' : (flags.is_paid ? 'pending' : 'not_started')),
       details: flags.is_invoiced ? {
         completed_at: contract.next_invoice_date || contract.invoice_date,
         note: contract.next_invoice_number || contract.invoice_number || null
@@ -206,6 +212,7 @@ function buildRenewalTimelineSteps(contract) {
 }
 
 // 取得目前處理到的步驟（用於 Timeline currentStep）
+// ★ 100 修正：is_paid/is_invoiced = null 時跳過（無續約草稿）
 function getCurrentTimelineStep(contract) {
   const flags = computeFlags(contract)
 
@@ -216,10 +223,10 @@ function getCurrentTimelineStep(contract) {
   if (!flags.has_draft) return 'draft'
   if (!flags.is_sent_for_sign) return 'send_sign'
   if (!flags.is_signed) return 'signed'
-  // 財務完成
-  if (!flags.is_paid) return 'payment'
-  if (!flags.is_invoiced) return 'invoice'
-  return null  // 全部完成
+  // 財務完成（null = 不適用，跳過）
+  if (flags.is_paid === false) return 'payment'
+  if (flags.is_invoiced === false) return 'invoice'
+  return null  // 全部完成或不適用
 }
 
 // 發票狀態定義
@@ -320,22 +327,27 @@ function ChecklistPopover({ contract, onUpdate, isUpdating }) {
   ]
 
   // 財務完成步驟（唯讀，可導航）
+  // ★ 100 修正：無續約草稿時（null）顯示「不適用」
   const financeItems = [
     {
       key: 'paid',
       label: '已收款',
       icon: Receipt,
-      checked: flags.is_paid,
-      hint: flags.is_paid ? '（付款管理）' : '前往付款管理',
-      linkTo: nextContractId ? `/payments?contract_id=${nextContractId}` : null
+      checked: flags.is_paid === true,
+      disabled: flags.is_paid === null,  // 無續約草稿時 disable
+      hint: flags.is_paid === null ? '（尚無續約草稿）' :
+        (flags.is_paid ? '（付款管理）' : '前往付款管理'),
+      linkTo: flags.is_paid !== null && nextContractId ? `/payments?contract_id=${nextContractId}` : null
     },
     {
       key: 'invoiced',
       label: '已開票',
       icon: FileText,
-      checked: flags.is_invoiced,
-      hint: flags.is_invoiced ? '（發票系統）' : '前往發票管理',
-      linkTo: nextContractId ? `/invoices?contract_id=${nextContractId}` : null
+      checked: flags.is_invoiced === true,
+      disabled: flags.is_invoiced === null,
+      hint: flags.is_invoiced === null ? '（尚無續約草稿）' :
+        (flags.is_invoiced ? '（發票系統）' : '前往發票管理'),
+      linkTo: flags.is_invoiced !== null && nextContractId ? `/invoices?contract_id=${nextContractId}` : null
     },
   ]
 

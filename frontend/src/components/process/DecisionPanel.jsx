@@ -22,7 +22,7 @@
  */
 
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   CheckCircle,
   AlertTriangle,
@@ -100,6 +100,8 @@ const ACTION_LABELS = {
   SET_CONFIRMED: '設定續約意願',
   SET_NOTIFIED: '標記已通知',
   SEND_SIGN_REMINDER: '發送催簽提醒',
+  GO_TO_PAYMENTS: '前往繳費管理',
+  GO_TO_INVOICES: '前往發票管理',
 
   // 付款流程
   SEND_REMINDER: '發送催繳通知',
@@ -178,6 +180,7 @@ export default function DecisionPanel({
   customActions,    // 額外的自訂按鈕
   className = ''
 }) {
+  const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(false)
   const [loadingAction, setLoadingAction] = useState(null)
 
@@ -217,6 +220,11 @@ export default function DecisionPanel({
       const result = await executeAction(processKey, actionKey, entityId, payload)
 
       if (result.success) {
+        // 處理導航行動（GO_TO_PAYMENTS, GO_TO_INVOICES 等）
+        if (result.data?.action === 'navigate' && result.data?.url) {
+          navigate(result.data.url)
+          return
+        }
         onActionComplete?.(result)
       } else {
         onActionError?.(result.error)
