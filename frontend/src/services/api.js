@@ -447,6 +447,7 @@ export const crm = {
       })
 
       // 組裝客戶和場館資訊（從 workspace 欄位映射）
+      // ★ 2026-01-01 修復：補齊 address 和 risk_level (Migration 098)
       const customer = {
         id: contract.customer_id,
         name: contract.customer_name,
@@ -454,7 +455,9 @@ export const crm = {
         phone: contract.customer_phone,
         email: contract.customer_email,
         line_user_id: contract.line_user_id,
-        status: contract.customer_status
+        status: contract.customer_status,
+        address: contract.customer_address,      // ★ 新增
+        risk_level: contract.customer_risk_level  // ★ 新增
       }
 
       const branch = {
@@ -498,13 +501,9 @@ export const crm = {
     })
   },
 
-  async updateInvoiceStatus(contractId, invoiceStatus, notes = null) {
-    return callTool('renewal_update_invoice_status', {
-      contract_id: contractId,
-      invoice_status: invoiceStatus,
-      notes
-    })
-  },
+  // ★ 2026-01-01 移除：updateInvoiceStatus 已棄用
+  // 發票應透過 invoices 模組管理 (SSOT)
+  // 原工具 renewal_update_invoice_status 已在後端標記棄用
 
   // 更新續約備註（直接呼叫 PostgREST）
   async updateRenewalNotes(contractId, notes) {

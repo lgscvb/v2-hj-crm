@@ -522,12 +522,10 @@ export default function Renewals() {
   const { data: branches } = useBranches()
 
   // 設定 renewal flag
+  // ★ 2026-01-01 修復：移除 invoice flag 處理，發票應透過發票系統管理 (SSOT)
   const setRenewalFlag = useMutation({
     mutationFn: async ({ contractId, flag, value }) => {
-      if (flag === 'invoice') {
-        // 發票狀態使用獨立 API
-        return crm.updateInvoiceStatus(contractId, value)
-      }
+      // 只支援 notified/confirmed，發票由 invoices 模組管理
       return crm.setRenewalFlag(contractId, flag, value)
     },
     onSuccess: (result, variables) => {
@@ -535,7 +533,7 @@ export default function Renewals() {
       // 同步更新 selectedContract 以即時反映 UI 變化
       if (selectedContract && selectedContract.id === variables.contractId) {
         // V3 設計：只有 notified 和 confirmed 可手動更新
-        // paid/signed 已移除（SSOT 由其他模組管理）
+        // paid/signed/invoice 已移除（SSOT 由其他模組管理）
         const flagMap = {
           notified: 'renewal_notified_at',
           confirmed: 'renewal_confirmed_at'
@@ -545,12 +543,6 @@ export default function Renewals() {
           setSelectedContract(prev => ({
             ...prev,
             [field]: variables.value ? new Date().toISOString() : null
-          }))
-        } else if (variables.flag === 'invoice') {
-          // 發票狀態暫時保留操作（過渡期）
-          setSelectedContract(prev => ({
-            ...prev,
-            invoice_status: variables.value
           }))
         }
       }

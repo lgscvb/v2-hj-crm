@@ -257,6 +257,7 @@ function ChecklistPopover({ contract, onUpdate, onSaveNotes, isUpdating, onClose
 // 進度條元件
 // ============================================================================
 
+// ★ 2026-01-01 修復：completion_score 已改為 0-7（7 步驟）
 function ProgressBar({ progress, stage }) {
   const colors = {
     pending: 'bg-gray-200',
@@ -267,16 +268,16 @@ function ProgressBar({ progress, stage }) {
   return (
     <div className="flex items-center gap-2">
       <div className="flex gap-0.5">
-        {[...Array(5)].map((_, i) => (
+        {[...Array(7)].map((_, i) => (
           <div
             key={i}
-            className={`w-2.5 h-5 rounded-sm transition-colors ${
+            className={`w-2 h-5 rounded-sm transition-colors ${
               i < progress ? colors[stage] : 'bg-gray-200'
             }`}
           />
         ))}
       </div>
-      <span className="text-sm text-gray-600">{progress}/5</span>
+      <span className="text-sm text-gray-600">{progress}/7</span>
     </div>
   )
 }
@@ -367,13 +368,11 @@ export default function ContractDetail() {
   })
 
   // 設定 renewal flag (Checklist)
+  // ★ 2026-01-01 修復：移除 invoice flag 處理，發票應透過發票系統管理 (SSOT)
   const setRenewalFlag = useMutation({
     mutationFn: async ({ contractId, flag, value }) => {
       console.log('[setRenewalFlag] mutationFn called:', { contractId, flag, value })
-      if (flag === 'invoice') {
-        // 發票狀態使用獨立 API
-        return crm.updateInvoiceStatus(contractId, value)
-      }
+      // 只支援 notified/confirmed，發票由 invoices 模組管理
       return crm.setRenewalFlag(contractId, flag, value)
     },
     onSuccess: (data) => {

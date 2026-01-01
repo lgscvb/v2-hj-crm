@@ -34,13 +34,14 @@ const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444']
 // 續約 Checklist 相關：直接使用 v_renewal_reminders 的計算欄位
 // ============================================================================
 
-// ★ 2025-12-31 重構：直接讀取 View 計算的 completion_score
+// ★ 2026-01-01 重構：直接讀取 View 計算的 completion_score
 // 不再在前端計算，保持 SSOT 原則
+// ★ 修復：completion_score 已改為 0-7（7 步驟）
 function getDisplayStatus(contract) {
-  // 直接使用 View 的 completion_score（0-5）
+  // 直接使用 View 的 completion_score（0-7）
   const score = contract.completion_score || 0
 
-  if (score >= 5) return { stage: 'completed', progress: 5 }
+  if (score >= 7) return { stage: 'completed', progress: 7 }
   if (score === 0) return { stage: 'pending', progress: 0 }
   return { stage: 'in_progress', progress: score }
 }
@@ -642,7 +643,7 @@ export default function Dashboard() {
                           : `${renewal.days_until_expiry} 天後到期`}
                       </Badge>
                       <p className="text-xs text-gray-500 mt-1">
-                        進度 {status.progress}/5
+                        進度 {status.progress}/7
                       </p>
                     </div>
                   </div>
