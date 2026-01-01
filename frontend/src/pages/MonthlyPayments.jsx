@@ -54,13 +54,14 @@ export default function MonthlyPayments() {
   // 狀態篩選
   const [statusFilter, setStatusFilter] = useState('all')
 
-  // 計算月份範圍
+  // 計算月份範圍（使用本地日期格式，避免 toISOString UTC 時區偏移）
   const { startDate, endDate } = useMemo(() => {
-    const start = new Date(currentDate.year, currentDate.month, 1)
-    const end = new Date(currentDate.year, currentDate.month + 1, 0)
+    const year = currentDate.year
+    const month = currentDate.month + 1 // 0-indexed to 1-indexed
+    const lastDay = new Date(year, month, 0).getDate() // 該月最後一天
     return {
-      startDate: start.toISOString().split('T')[0],
-      endDate: end.toISOString().split('T')[0]
+      startDate: `${year}-${String(month).padStart(2, '0')}-01`,
+      endDate: `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
     }
   }, [currentDate])
 
@@ -69,9 +70,10 @@ export default function MonthlyPayments() {
     queryKey: ['monthly-payments', currentDate.year, currentDate.month, selectedBranch],
     queryFn: async () => {
       // 查詢該月到期或付款的記錄
+      // PostgREST 語法：or=(and(cond1,cond2),and(cond3,cond4)) 表示 (cond1 AND cond2) OR (cond3 AND cond4)
       const params = {
         select: 'id,contract_id,customer_id,branch_id,payment_period,amount,due_date,paid_at,payment_status,payment_method,notes,customer:customers(name,company_name),branch:branches(name),contract:contracts(contract_number)',
-        or: `(due_date.gte.${startDate},due_date.lte.${endDate}),(paid_at.gte.${startDate},paid_at.lte.${endDate})`,
+        or: `(and(due_date.gte.${startDate},due_date.lte.${endDate}),and(paid_at.gte.${startDate},paid_at.lte.${endDate}))`,
         order: 'due_date.asc',
         limit: 500
       }
