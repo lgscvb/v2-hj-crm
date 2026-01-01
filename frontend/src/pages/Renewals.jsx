@@ -402,28 +402,7 @@ function ChecklistPopover({ contract, onUpdate, isUpdating }) {
       <div className="pt-2 mt-2 border-t space-y-2">
         <div className="text-xs text-gray-400 mb-1">財務完成（唯讀）</div>
         {financeItems.map(renderReadonlyItem)}
-
-        {/* 發票狀態選擇（暫時保留操作，過渡期） */}
-        {!flags.is_invoiced && (
-          <div className="ml-6 mt-1">
-            <div className="grid grid-cols-2 gap-1">
-              {Object.entries(INVOICE_STATUSES).map(([key, { label }]) => (
-                <button
-                  key={key}
-                  onClick={() => onUpdate('invoice', key)}
-                  disabled={isUpdating}
-                  className={`text-xs px-2 py-1 rounded ${
-                    contract.invoice_status === key
-                      ? 'bg-green-100 text-green-700 font-medium'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* ★ 2026-01-01 移除發票狀態按鈕 - 發票應透過發票管理頁面操作 (SSOT) */}
       </div>
 
       {isUpdating && (

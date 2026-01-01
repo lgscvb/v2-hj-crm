@@ -64,47 +64,65 @@ const BRANCHES = {
 // Checklist 相關：Computed Flags 和 Display Status
 // ============================================================================
 
-// 從 workspace timeline 狀態計算 flags
-// ★ 2025-12-31 重構：改用 v_contract_workspace 的 timeline_*_status（SSOT）
+// 從 workspace View 計算 flags（7 步驟模型）
+// ★ 2026-01-01 修復：對齊 Renewals.jsx 的 7 步驟（SSOT）
 function computeFlags(contract) {
-  // 直接使用 workspace 計算好的 timeline 狀態
-  // 'done' = 完成, 'in_progress'/'pending' = 進行中, 'not_started' = 未開始
   return {
-    is_notified: contract.timeline_intent_status && contract.timeline_intent_status !== 'not_started',
-    is_confirmed: contract.timeline_intent_status === 'done',
-    is_paid: contract.timeline_payment_status === 'done',
-    is_signed: contract.timeline_signing_status === 'done',
-    is_invoiced: contract.timeline_invoice_status === 'done'
+    // 意願管理
+    is_notified: !!contract.is_notified,
+    is_confirmed: !!contract.is_confirmed,
+
+    // 合約建立
+    has_draft: !!contract.has_renewal_draft,
+    is_sent_for_sign: !!contract.is_sent_for_sign,
+    is_signed: !!contract.is_signed,
+
+    // 財務完成
+    is_paid: !!contract.is_paid,
+    is_invoiced: !!contract.is_invoiced
   }
 }
 
-// 根據 flags 計算顯示狀態
+// 根據 flags 計算顯示狀態（7 步驟）
 function getDisplayStatus(contract) {
   const flags = computeFlags(contract)
 
-  // 檢查是否全部完成
-  const allDone = flags.is_notified && flags.is_confirmed &&
-    flags.is_paid && flags.is_invoiced && flags.is_signed
-  if (allDone) return { label: '完成', stage: 'completed', progress: 5, issues: [] }
+  // 計算完成的步驟數（7 步驟）
+  const completedSteps = [
+    flags.is_notified,
+    flags.is_confirmed,
+    flags.has_draft,
+    flags.is_sent_for_sign,
+    flags.is_signed,
+    flags.is_paid,
+    flags.is_invoiced
+  ].filter(Boolean).length
 
-  // 檢查是否尚未開始
-  const noneStarted = !flags.is_notified && !flags.is_confirmed &&
-    !flags.is_paid && !flags.is_invoiced && !flags.is_signed
-  if (noneStarted) return { label: '待處理', stage: 'pending', progress: 0, issues: ['全部待處理'] }
+  // 全部完成
+  if (completedSteps === 7) {
+    return { label: '完成', stage: 'completed', progress: 7, issues: [] }
+  }
+
+  // 尚未開始
+  if (completedSteps === 0) {
+    return { label: '待處理', stage: 'pending', progress: 0, issues: ['全部待處理'] }
+  }
 
   // 收集缺漏項目
   const issues = []
   if (!flags.is_notified) issues.push('未通知')
   if (!flags.is_confirmed) issues.push('未確認')
+  if (!flags.has_draft) issues.push('未建草稿')
+  if (!flags.is_sent_for_sign) issues.push('未送簽')
+  if (!flags.is_signed) issues.push('未簽約')
   if (!flags.is_paid) issues.push('未收款')
   if (!flags.is_invoiced) issues.push('未開票')
-  if (!flags.is_signed) issues.push('未簽約')
 
   return {
     label: '進行中',
     stage: 'in_progress',
     issues,
-    progress: 5 - issues.length
+    progress: completedSteps
   }
 }
 

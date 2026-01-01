@@ -101,6 +101,26 @@ const getActionHandler = (processKey, actionKey) => {
           contract_id: contractId,
           force: payload.force || false
         })
+      },
+
+      // ★ 2026-01-01 新增：導流到付款管理（payment_pending 狀態使用）
+      GO_TO_PAYMENTS: async (contractId, payload) => {
+        return {
+          success: true,
+          action: 'navigate',
+          url: `/payments?contract_id=${contractId}`,
+          message: '請前往繳費管理頁面處理款項'
+        }
+      },
+
+      // ★ 2026-01-01 新增：導流到發票管理（invoice_pending 狀態使用）
+      GO_TO_INVOICES: async (contractId, payload) => {
+        return {
+          success: true,
+          action: 'navigate',
+          url: `/invoices?contract_id=${contractId}`,
+          message: '請前往發票管理頁面開立發票'
+        }
       }
     },
 
@@ -293,7 +313,7 @@ export const hasAction = (processKey, actionKey) => {
  */
 export const getAvailableActions = (processKey) => {
   const actionMap = {
-    renewal: ['CREATE_DRAFT', 'SEND_FOR_SIGN', 'MARK_SIGNED', 'ACTIVATE', 'SET_CONFIRMED', 'SET_NOTIFIED', 'SEND_SIGN_REMINDER'],
+    renewal: ['CREATE_DRAFT', 'SEND_FOR_SIGN', 'MARK_SIGNED', 'ACTIVATE', 'SET_CONFIRMED', 'SET_NOTIFIED', 'SEND_SIGN_REMINDER', 'GO_TO_PAYMENTS', 'GO_TO_INVOICES'],
     payment: ['SEND_REMINDER', 'RECORD_PAYMENT', 'REQUEST_WAIVE', 'UNDO_PAYMENT', 'SET_PROMISE', 'CLEAR_PROMISE'],
     invoice: ['ISSUE_INVOICE', 'VOID_INVOICE', 'UPDATE_CUSTOMER'],
     termination: ['UPDATE_CHECKLIST', 'UPDATE_STATUS'],
