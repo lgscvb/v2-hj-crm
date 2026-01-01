@@ -204,8 +204,9 @@ function buildRenewalTimelineSteps(contract) {
       details: flags.is_invoiced ? {
         completed_at: contract.next_invoice_date || contract.invoice_date,
         note: contract.next_invoice_number || contract.invoice_number || null
-      } : (contract.invoice_status === 'pending_tax_id' ? {
-        note: '等待客戶提供統編'
+      } : (contract.has_renewal_draft && !contract.customer_company_tax_id ? {
+        // ★ 103 修正：改用 customer_company_tax_id 判斷（提示文字，非阻塞）
+        note: '提醒：客戶尚未提供統編'
       } : null)
     }
   ]
@@ -229,13 +230,6 @@ function getCurrentTimelineStep(contract) {
   return null  // 全部完成或不適用
 }
 
-// 發票狀態定義
-const INVOICE_STATUSES = {
-  pending_tax_id: { label: '等待統編', color: 'yellow' },
-  issued_personal: { label: '已開二聯', color: 'blue' },
-  issued_business: { label: '已開三聯', color: 'green' }
-}
-
 // 可選欄位定義
 const OPTIONAL_COLUMNS = {
   branch_name: { label: '分館', default: false },
@@ -243,7 +237,7 @@ const OPTIONAL_COLUMNS = {
   end_date: { label: '到期日', default: true },
   days_until_expiry: { label: '剩餘', default: true },
   renewal_progress: { label: '續約進度', default: true },
-  invoice_status: { label: '發票', default: false },
+  invoice: { label: '發票', default: false },
   monthly_rent: { label: '月租', default: true },
   period_amount: { label: '當期金額', default: true },
   line_user_id: { label: 'LINE', default: true }

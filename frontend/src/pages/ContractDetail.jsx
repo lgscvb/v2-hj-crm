@@ -635,7 +635,7 @@ export default function ContractDetail() {
       contract_type: contract.contract_type || 'virtual_office',
       start_date: contract.start_date || '',
       end_date: contract.end_date || '',
-      original_price: contract.original_price || 3000,
+      original_price: contract.original_price ?? '',  // ★ 103: 保持空值，避免覆寫
       monthly_rent: contract.monthly_rent || '',
       deposit_amount: contract.deposit || '',
       payment_cycle: contract.payment_cycle || 'monthly',
