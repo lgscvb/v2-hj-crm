@@ -283,7 +283,9 @@ const getPeriodAmount = (row) => {
 // ============================================================================
 
 function ChecklistPopover({ contract, onUpdate, isUpdating }) {
+  const navigate = useNavigate()
   const flags = computeFlags(contract)
+  const nextContractId = contract.next_contract_id
 
   // 可手動更新的意願管理項目
   const editableItems = [
@@ -317,21 +319,23 @@ function ChecklistPopover({ contract, onUpdate, isUpdating }) {
     },
   ]
 
-  // 財務完成步驟（唯讀）
+  // 財務完成步驟（唯讀，可導航）
   const financeItems = [
     {
       key: 'paid',
       label: '已收款',
       icon: Receipt,
       checked: flags.is_paid,
-      hint: flags.is_paid ? '（付款管理）' : '→ 付款管理'
+      hint: flags.is_paid ? '（付款管理）' : '前往付款管理',
+      linkTo: nextContractId ? `/payments?contract_id=${nextContractId}` : null
     },
     {
       key: 'invoiced',
       label: '已開票',
       icon: FileText,
       checked: flags.is_invoiced,
-      hint: flags.is_invoiced ? '（發票系統）' : '→ 發票系統'
+      hint: flags.is_invoiced ? '（發票系統）' : '前往發票管理',
+      linkTo: nextContractId ? `/invoices?contract_id=${nextContractId}` : null
     },
   ]
 
@@ -345,8 +349,8 @@ function ChecklistPopover({ contract, onUpdate, isUpdating }) {
     })
   }
 
-  // 渲染唯讀項目
-  const renderReadonlyItem = ({ key, label, icon: Icon, checked, hint }) => (
+  // 渲染唯讀項目（可選導航）
+  const renderReadonlyItem = ({ key, label, icon: Icon, checked, hint, linkTo }) => (
     <div key={key} className="flex items-center justify-between">
       <div className="flex items-center gap-2 flex-1">
         <div className={`w-4 h-4 rounded border flex items-center justify-center ${
@@ -359,7 +363,17 @@ function ChecklistPopover({ contract, onUpdate, isUpdating }) {
           {label}
         </span>
       </div>
-      <span className="text-xs text-gray-400">{hint}</span>
+      {linkTo && !checked ? (
+        <button
+          onClick={() => navigate(linkTo)}
+          className="text-xs text-primary-600 hover:text-primary-800 hover:underline flex items-center gap-1"
+        >
+          {hint}
+          <ArrowRight className="w-3 h-3" />
+        </button>
+      ) : (
+        <span className="text-xs text-gray-400">{hint}</span>
+      )}
     </div>
   )
 
