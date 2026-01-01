@@ -846,7 +846,8 @@ async def create_contract(
     plan_name: str = None,
     broker_name: str = None,
     broker_firm_id: int = None,
-    notes: str = None
+    notes: str = None,
+    renewed_from_id: int = None  # 續約來源合約 ID
 ) -> Dict[str, Any]:
     """
     建立新合約（以合約為主體的架構）
@@ -928,6 +929,8 @@ async def create_contract(
         data["commission_eligible"] = True
     if notes:
         data["notes"] = notes
+    if renewed_from_id:
+        data["renewed_from_id"] = renewed_from_id
 
     try:
         result = await postgrest_post("contracts", data)

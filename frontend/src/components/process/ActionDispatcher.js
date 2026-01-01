@@ -212,6 +212,15 @@ const getActionHandler = (processKey, actionKey) => {
           url: `/customers/${payload.customerId}/edit`,
           message: '請前往客戶頁面補齊統一編號'
         }
+      },
+
+      // ★ 2026-01-02 新增：手動確認已開發票（用於外部 App 開立情況）
+      MARK_ISSUED: async (paymentId, payload) => {
+        return callTool('invoice_mark_issued', {
+          payment_id: paymentId,
+          invoice_number: payload?.invoice_number,
+          notes: payload?.notes
+        })
       }
     },
 
@@ -319,7 +328,7 @@ export const getAvailableActions = (processKey) => {
   const actionMap = {
     renewal: ['CREATE_DRAFT', 'SEND_FOR_SIGN', 'MARK_SIGNED', 'ACTIVATE', 'SET_CONFIRMED', 'SET_NOTIFIED', 'SEND_SIGN_REMINDER', 'GO_TO_PAYMENTS', 'GO_TO_INVOICES'],
     payment: ['SEND_REMINDER', 'RECORD_PAYMENT', 'REQUEST_WAIVE', 'UNDO_PAYMENT', 'SET_PROMISE', 'CLEAR_PROMISE'],
-    invoice: ['ISSUE_INVOICE', 'VOID_INVOICE', 'UPDATE_CUSTOMER'],
+    invoice: ['ISSUE_INVOICE', 'VOID_INVOICE', 'UPDATE_CUSTOMER', 'MARK_ISSUED'],
     termination: ['UPDATE_CHECKLIST', 'UPDATE_STATUS'],
     signing: ['GENERATE_PDF', 'SEND_FOR_SIGN', 'MARK_SIGNED', 'SEND_SIGN_REMINDER'],
     commission: ['PAY_COMMISSION', 'MARK_ELIGIBLE', 'CANCEL_COMMISSION']

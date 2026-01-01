@@ -17,7 +17,8 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
-  Trash2
+  Trash2,
+  Check
 } from 'lucide-react'
 
 // 發票狀態對應
@@ -46,6 +47,7 @@ export default function Invoices() {
   const [showVoidModal, setShowVoidModal] = useState(false)
   const [showAllowanceModal, setShowAllowanceModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [showMarkIssuedModal, setShowMarkIssuedModal] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState(null)
 
   // 處理 URL 參數（從收款頁面跳轉過來）
@@ -191,6 +193,30 @@ export default function Invoices() {
     }
   })
 
+  // 手動標記已開票（外部 App 開立情況）
+  const markIssuedMutation = useMutation({
+    mutationFn: async ({ paymentId, invoiceNumber, notes }) => {
+      const result = await callTool('invoice_mark_issued', {
+        payment_id: paymentId,
+        invoice_number: invoiceNumber || undefined,
+        notes: notes || undefined
+      })
+      if (!result?.success || !result?.result?.success) {
+        throw new Error(result?.result?.message || result?.error || '操作失敗')
+      }
+      return result.result
+    },
+    onSuccess: (data) => {
+      addNotification({ type: 'success', message: data.message || '已標記為已開票' })
+      queryClient.invalidateQueries(['invoices'])
+      setShowMarkIssuedModal(false)
+      setSelectedPayment(null)
+    },
+    onError: (error) => {
+      addNotification({ type: 'error', message: `操作失敗：${error.message}` })
+    }
+  })
+
   // 統計數據
   const stats = {
     total: invoices.length,
@@ -289,17 +315,31 @@ export default function Invoices() {
       cell: (row) => (
         <div className="flex items-center gap-1">
           {!row.invoice_number ? (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setSelectedPayment(row)
-                setShowCreateModal(true)
-              }}
-              className="btn-primary text-xs py-1 px-2"
-            >
-              <Plus className="w-3 h-3 mr-1" />
-              開立
-            </button>
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSelectedPayment(row)
+                  setShowCreateModal(true)
+                }}
+                className="btn-primary text-xs py-1 px-2"
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                開立
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSelectedPayment(row)
+                  setShowMarkIssuedModal(true)
+                }}
+                className="btn-secondary text-xs py-1 px-2 text-green-600 hover:bg-green-50"
+                title="外部開立發票時使用"
+              >
+                <Check className="w-3 h-3 mr-1" />
+                手動確認
+              </button>
+            </>
           ) : !['void', 'voided'].includes(row.invoice_status) ? (
             <>
               <button
@@ -525,6 +565,111 @@ export default function Invoices() {
           isLoading={deleteMutation.isPending}
         />
       )}
+
+      {/* 手動確認已開票 Modal */}
+      {showMarkIssuedModal && selectedPayment && (
+        <MarkIssuedModal
+          payment={selectedPayment}
+          onClose={() => {
+            setShowMarkIssuedModal(false)
+            setSelectedPayment(null)
+          }}
+          onSubmit={(data) => markIssuedMutation.mutate(data)}
+          isLoading={markIssuedMutation.isPending}
+        />
+      )}
+    </div>
+  )
+}
+
+// 手動確認已開票 Modal（外部 App 開立）
+function MarkIssuedModal({ payment, onClose, onSubmit, isLoading }) {
+  const [invoiceNumber, setInvoiceNumber] = useState('')
+  const [notes, setNotes] = useState('')
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onSubmit({
+      paymentId: payment.id,
+      invoiceNumber: invoiceNumber.trim() || null,
+      notes: notes.trim() || null
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+        <h2 className="text-lg font-bold mb-4">手動確認已開發票</h2>
+
+        <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+          <p className="text-sm text-blue-700">
+            此功能用於已透過外部系統（如光貿 App）開立發票的情況。
+            系統將標記此筆付款的發票狀態為「已開立」。
+          </p>
+        </div>
+
+        <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+          <p className="text-sm text-gray-600">客戶：{payment.customer?.name}</p>
+          <p className="text-sm text-gray-600">金額：${(payment.amount || 0).toLocaleString()}</p>
+          <p className="text-sm text-gray-600">期數：{payment.payment_period}</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              發票號碼（選填）
+            </label>
+            <input
+              type="text"
+              value={invoiceNumber}
+              onChange={(e) => setInvoiceNumber(e.target.value)}
+              className="input w-full"
+              placeholder="如有可填入"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              備註（選填）
+            </label>
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="input w-full"
+              placeholder="例如：使用光貿 App 開立"
+            />
+          </div>
+
+          <div className="flex gap-3 mt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn-secondary flex-1"
+              disabled={isLoading}
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              className="btn-primary flex-1"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  處理中...
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4 mr-2" />
+                  確認已開票
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }

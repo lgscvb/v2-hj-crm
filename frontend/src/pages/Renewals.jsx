@@ -662,28 +662,11 @@ export default function Renewals() {
     })
   }
 
-  // 打開續約草稿 Modal
+  // 建立續約草稿：簡化流程，直接導航到合約建立頁面
   const openRenewalDraftModal = () => {
     if (!selectedContract) return
-
-    // 計算新合約日期（舊合約到期日 + 1 天開始，預設續約一年）
-    const oldEndDate = new Date(selectedContract.end_date)
-    const newStartDate = new Date(oldEndDate)
-    newStartDate.setDate(newStartDate.getDate() + 1)
-    const newEndDate = new Date(newStartDate)
-    newEndDate.setFullYear(newEndDate.getFullYear() + 1)
-    newEndDate.setDate(newEndDate.getDate() - 1)
-
-    setDraftForm({
-      start_date: newStartDate.toISOString().split('T')[0],
-      end_date: newEndDate.toISOString().split('T')[0],
-      monthly_rent: selectedContract.monthly_rent || '',
-      payment_cycle: selectedContract.payment_cycle || 'monthly',
-      position_number: selectedContract.position_number || '',
-      notes: ''
-    })
-    setRenewalDraft(null)
-    setShowRenewalDraftModal(true)
+    // 導航到合約建立頁面，帶入續約來源
+    navigate(`/contracts/new?renew_from=${selectedContract.id}`)
   }
 
   // 提交續約草稿

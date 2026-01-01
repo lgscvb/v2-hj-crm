@@ -225,7 +225,8 @@ from tools.invoice_tools import (
     invoice_create,
     invoice_void,
     invoice_query,
-    invoice_allowance
+    invoice_allowance,
+    invoice_mark_issued
 )
 
 # Invoice V2 - 冪等性保護（防止重複開票）
@@ -508,7 +509,8 @@ MCP_TOOLS = {
             "customer_id": {"type": "integer", "description": "客戶ID（可選，不填則自動處理）", "optional": True},
             "contract_type": {"type": "string", "description": "合約類型", "default": "virtual_office"},
             "deposit_amount": {"type": "number", "description": "押金", "default": 0},
-            "original_price": {"type": "number", "description": "定價（原價）", "optional": True}
+            "original_price": {"type": "number", "description": "定價（原價）", "optional": True},
+            "renewed_from_id": {"type": "integer", "description": "續約來源合約ID（續約時使用）", "optional": True}
         },
         "handler": create_contract
     },
@@ -879,6 +881,15 @@ MCP_TOOLS = {
             "reason": {"type": "string", "description": "折讓原因", "required": True}
         },
         "handler": invoice_allowance
+    },
+    "invoice_mark_issued": {
+        "description": "手動標記發票已開立（用於外部 App 開立發票的情況）",
+        "parameters": {
+            "payment_id": {"type": "integer", "description": "繳費記錄ID", "required": True},
+            "invoice_number": {"type": "string", "description": "發票號碼（選填）", "optional": True},
+            "notes": {"type": "string", "description": "備註（選填）", "optional": True}
+        },
+        "handler": invoice_mark_issued
     },
 
     # ==========================================================================

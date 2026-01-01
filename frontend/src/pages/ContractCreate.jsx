@@ -91,10 +91,12 @@ export default function ContractCreate() {
   const [searchParams] = useSearchParams()
   const addNotification = useStore((state) => state.addNotification)
 
-  // 從 URL 參數讀取報價單 ID
+  // 從 URL 參數讀取報價單 ID 或續約來源合約 ID
   const fromQuoteId = searchParams.get('from_quote')
+  const renewFromId = searchParams.get('renew_from')
 
   const [form, setForm] = useState(getInitialForm)
+  const [renewedFromId, setRenewedFromId] = useState(null) // 記錄續約來源
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [originalPriceLocked, setOriginalPriceLocked] = useState(true)
   const [showOriginalPriceWarning, setShowOriginalPriceWarning] = useState(false)
@@ -102,12 +104,40 @@ export default function ContractCreate() {
   const [showDepositWarning, setShowDepositWarning] = useState(false)
   const [showStamp, setShowStamp] = useState(false) // 電子用印
   const [quoteLoaded, setQuoteLoaded] = useState(false) // 避免重複載入
+  const [renewLoaded, setRenewLoaded] = useState(false) // 避免續約資料重複載入
 
   // 從報價單載入資料（如果有 from_quote 參數）
   const { data: quoteData, isLoading: isLoadingQuote } = useQuery({
     queryKey: ['quote', fromQuoteId],
     queryFn: () => db.query('v_quotes', { id: `eq.${fromQuoteId}` }),
     enabled: !!fromQuoteId,
+    staleTime: 0
+  })
+
+  // 從舊合約載入資料（如果有 renew_from 參數）
+  const { data: renewData, isLoading: isLoadingRenew } = useQuery({
+    queryKey: ['contract-renew', renewFromId],
+    queryFn: async () => {
+      // 取得合約基本資料
+      const contracts = await db.query('contracts', {
+        id: `eq.${renewFromId}`,
+        select: '*'
+      })
+      if (!contracts?.length) return null
+
+      // 取得客戶資料
+      const contract = contracts[0]
+      const customers = await db.query('customers', {
+        id: `eq.${contract.customer_id}`,
+        select: '*'
+      })
+
+      return {
+        contract,
+        customer: customers?.[0] || null
+      }
+    },
+    enabled: !!renewFromId,
     staleTime: 0
   })
 
@@ -176,6 +206,57 @@ export default function ContractCreate() {
       addNotification({ type: 'info', message: `已從報價單 ${quote.quote_number} 載入資料` })
     }
   }, [quoteData, quoteLoaded, addNotification])
+
+  // 當續約資料載入後，預填表單
+  useEffect(() => {
+    if (renewData && !renewLoaded) {
+      const { contract, customer } = renewData
+
+      // 計算新合約日期：原合約結束日 +1 為新開始日，+1年為新結束日
+      const endDate = new Date(contract.end_date)
+      const newStart = new Date(endDate)
+      newStart.setDate(newStart.getDate() + 1)
+      const newEnd = new Date(newStart)
+      newEnd.setFullYear(newEnd.getFullYear() + 1)
+      newEnd.setDate(newEnd.getDate() - 1)
+
+      const startDateStr = newStart.toISOString().split('T')[0]
+      const endDateStr = newEnd.toISOString().split('T')[0]
+
+      // 預填表單（從舊合約 + 客戶資料）
+      setForm({
+        company_name: contract.company_name || customer?.company_name || '',
+        representative_name: customer?.name || '',
+        representative_address: customer?.address || '',
+        id_number: customer?.id_number || '',
+        company_tax_id: customer?.company_tax_id || '',
+        phone: customer?.phone || '',
+        email: customer?.email || '',
+        branch_id: contract.branch_id || 1,
+        contract_type: contract.contract_type || 'virtual_office',
+        room_number: contract.room_number || '',
+        start_date: startDateStr,
+        end_date: endDateStr,
+        contract_months: 12,
+        original_price: contract.original_price || DEFAULT_ORIGINAL_PRICE,
+        monthly_rent: contract.monthly_rent || '',
+        deposit_amount: contract.deposit || DEFAULT_DEPOSIT,
+        payment_cycle: contract.payment_cycle || 'monthly',
+        payment_day: contract.payment_day || 8,
+        notes: `續約自：${contract.contract_number}`
+      })
+
+      // 記錄續約來源（用於 createContract）
+      setRenewedFromId(parseInt(renewFromId))
+
+      // 解鎖欄位（因為是續約，業務可能要調整金額）
+      setOriginalPriceLocked(false)
+      setDepositLocked(false)
+
+      setRenewLoaded(true)
+      addNotification({ type: 'info', message: `已載入續約資料，來源合約：${contract.contract_number}` })
+    }
+  }, [renewData, renewLoaded, renewFromId, addNotification])
 
   // 取得當前合約類型的設定
   const contractTypeConfig = CONTRACT_TYPES[form.contract_type] || CONTRACT_TYPES.virtual_office
@@ -320,7 +401,9 @@ export default function ContractCreate() {
         deposit_amount: parseFloat(form.deposit_amount) || 0,
         payment_cycle: form.payment_cycle,
         payment_day: parseInt(form.payment_day),
-        notes: form.notes || null
+        notes: form.notes || null,
+        // 續約來源（如果是續約）
+        renewed_from_id: renewedFromId || null
       })
 
       if (result?.success) {
@@ -360,15 +443,26 @@ export default function ContractCreate() {
           </button>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold text-gray-900">新增合約</h1>
+              <h1 className="text-xl font-bold text-gray-900">
+                {renewFromId ? '建立續約合約' : '新增合約'}
+              </h1>
               {fromQuoteId && quoteData?.[0] && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
                   來自報價單 {quoteData[0].quote_number}
                 </span>
               )}
+              {renewFromId && renewData?.contract && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
+                  續約自 {renewData.contract.contract_number}
+                </span>
+              )}
             </div>
             <p className="text-sm text-gray-500">
-              {fromQuoteId ? '已從報價單載入資料，請確認後建立合約' : '填寫合約資料，右側即時預覽'}
+              {fromQuoteId
+                ? '已從報價單載入資料，請確認後建立合約'
+                : renewFromId
+                  ? '已載入舊合約資料，請確認後建立續約合約'
+                  : '填寫合約資料，右側即時預覽'}
             </p>
           </div>
         </div>

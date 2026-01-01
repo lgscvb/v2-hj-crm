@@ -609,3 +609,77 @@ async def invoice_allowance(
             "success": False,
             "message": f"發票 API 呼叫失敗: {str(e)}"
         }
+
+
+async def invoice_mark_issued(
+    payment_id: int,
+    invoice_number: str = None,
+    notes: str = None
+) -> Dict[str, Any]:
+    """
+    手動標記發票已開立（用於外部 App 開立發票的情況）
+
+    當發票是透過外部系統開立時，業務可以用此工具手動確認發票狀態。
+    這不會呼叫發票 API，只更新資料庫中的狀態。
+
+    Args:
+        payment_id: 繳費記錄 ID
+        invoice_number: 發票號碼（選填，如有可填入）
+        notes: 備註（選填）
+
+    Returns:
+        更新結果
+    """
+    # 1. 取得繳費記錄
+    try:
+        payments = await postgrest_get("payments", {"id": f"eq.{payment_id}"})
+        if not payments:
+            return {"success": False, "message": "找不到繳費記錄"}
+
+        payment = payments[0]
+
+        # 檢查是否已開票
+        if payment.get("invoice_status") == "issued":
+            return {
+                "success": False,
+                "message": "此繳費已標記為已開票",
+                "invoice_number": payment.get("invoice_number")
+            }
+
+    except Exception as e:
+        logger.error(f"取得繳費記錄失敗: {e}")
+        return {"success": False, "message": f"取得繳費記錄失敗: {e}"}
+
+    # 2. 更新狀態
+    update_data = {
+        "invoice_status": "issued",
+        "invoice_date": datetime.now().strftime("%Y-%m-%d")
+    }
+
+    if invoice_number:
+        update_data["invoice_number"] = invoice_number
+
+    if notes:
+        existing_notes = payment.get("notes") or ""
+        update_data["notes"] = f"{existing_notes}\n[手動確認] {notes}".strip()
+
+    try:
+        await postgrest_patch(
+            "payments",
+            {"id": f"eq.{payment_id}"},
+            update_data
+        )
+
+        logger.info(f"Payment {payment_id} 已手動標記為已開票")
+
+        return {
+            "success": True,
+            "message": "已標記為已開票",
+            "payment_id": payment_id,
+            "invoice_number": invoice_number or "(外部開立)",
+            "invoice_date": update_data["invoice_date"]
+        }
+
+    except Exception as e:
+        logger.error(f"更新發票狀態失敗: {e}")
+        return {"success": False, "message": f"更新發票狀態失敗: {e}"}

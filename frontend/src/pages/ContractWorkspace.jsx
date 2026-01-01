@@ -765,7 +765,8 @@ export default function ContractWorkspace() {
       let response
       switch (actionKey) {
         case 'create_draft':
-          setShowCreateDraftModal(true)
+          // 簡化流程：直接導航到合約建立頁面，帶入續約來源
+          navigate(`/contracts/new?renew_from=${contractId}`)
           setActionLoading(false)
           return
 
