@@ -337,7 +337,8 @@ async def invoice_void(
         if not invoice_number:
             return {"success": False, "message": "此繳費尚未開立發票"}
 
-        if payment.get("invoice_status") == "voided":
+        # ★ 105 修正：容錯判斷 void/voided（payments 表用 void，但歷史資料可能有 voided）
+        if payment.get("invoice_status") in ("void", "voided"):
             return {"success": False, "message": "發票已作廢"}
 
         branch_id = payment.get("branch_id")
@@ -378,12 +379,12 @@ async def invoice_void(
             result = response.json()
 
             if result.get("status") == "success" or result.get("code") == "0":
-                # 更新繳費記錄
+                # ★ 105 修正：payments 表 constraint 只允許 'void'，不是 'voided'
                 await postgrest_patch(
                     "payments",
                     {"id": f"eq.{payment_id}"},
                     {
-                        "invoice_status": "voided",
+                        "invoice_status": "void",
                         "notes": f"{payment.get('notes', '')}\n[發票作廢] {reason}"
                     }
                 )
@@ -530,7 +531,8 @@ async def invoice_allowance(
         if not invoice_number:
             return {"success": False, "message": "此繳費尚未開立發票"}
 
-        if payment.get("invoice_status") == "voided":
+        # ★ 105 修正：容錯判斷 void/voided
+        if payment.get("invoice_status") in ("void", "voided"):
             return {"success": False, "message": "發票已作廢，無法折讓"}
 
         if allowance_amount > payment.get("amount", 0):

@@ -21,9 +21,12 @@ import {
 } from 'lucide-react'
 
 // 發票狀態對應
+// ★ 105 修正：payments 表用 'void'（constraint），invoices 表用 'voided'
+// 這裡同時支援兩者以容錯處理
 const INVOICE_STATUS = {
   issued: { label: '已開立', color: 'green' },
-  voided: { label: '已作廢', color: 'red' },
+  void: { label: '已作廢', color: 'red' },      // ★ payments 表用這個
+  voided: { label: '已作廢', color: 'red' },    // ★ invoices 表用這個
   allowance: { label: '已折讓', color: 'yellow' }
 }
 
@@ -297,7 +300,7 @@ export default function Invoices() {
               <Plus className="w-3 h-3 mr-1" />
               開立
             </button>
-          ) : row.invoice_status !== 'voided' ? (
+          ) : !['void', 'voided'].includes(row.invoice_status) ? (
             <>
               <button
                 onClick={(e) => {
