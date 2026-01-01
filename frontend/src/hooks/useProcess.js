@@ -235,7 +235,9 @@ export function parseDecision(workspaceData) {
     owner: workspaceData.decision_owner,
     priority: workspaceData.decision_priority,
     is_overdue: workspaceData.is_overdue,
-    overdue_days: workspaceData.overdue_days
+    overdue_days: workspaceData.overdue_days,
+    // ★ 105 新增：傳遞 next_contract_id 給 ActionDispatcher 導流用
+    next_contract_id: workspaceData.next_contract_id
   }
 }
 

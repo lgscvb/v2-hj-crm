@@ -75,15 +75,20 @@ function renderRenewalTimelineDetails(step) {
         <>
           {step.payment_status && <p>狀態：{step.payment_status}</p>}
           {step.paid_at && <p>付款時間：{formatDateTime(step.paid_at)}</p>}
-          {step.status === 'not_started' && <p className="text-gray-400">等待收款</p>}
+          {/* ★ 105 修正：後端回傳 pending/n/a，不是 not_started */}
+          {step.status === 'pending' && <p className="text-gray-400">等待收款</p>}
+          {step.status === 'n/a' && <p className="text-gray-400">無需收款</p>}
         </>
       )
     case 'invoice':
       return (
         <>
           {step.invoice_number && <p>發票號碼：{step.invoice_number}</p>}
-          {step.invoice_status && <p>狀態：{step.invoice_status}</p>}
-          {step.status === 'not_started' && <p className="text-gray-400">等待開票</p>}
+          {step.invoice_date && <p>開立日期：{step.invoice_date}</p>}
+          {/* ★ 105 修正：後端回傳 not_created/pending/n/a，不是 not_started；移除 invoice_status 顯示 */}
+          {step.status === 'not_created' && <p className="text-gray-400">尚未開票</p>}
+          {step.status === 'pending' && <p className="text-gray-400">等待開票</p>}
+          {step.status === 'n/a' && <p className="text-gray-400">無需開票</p>}
         </>
       )
     case 'activation':

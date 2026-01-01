@@ -104,21 +104,25 @@ const getActionHandler = (processKey, actionKey) => {
       },
 
       // ★ 2026-01-01 新增：導流到付款管理（payment_pending 狀態使用）
+      // ★ 105 修正：優先使用 next_contract_id（續約合約的款項），否則 fallback 到舊合約
       GO_TO_PAYMENTS: async (contractId, payload) => {
+        const targetId = payload?.next_contract_id || contractId
         return {
           success: true,
           action: 'navigate',
-          url: `/payments?contract_id=${contractId}`,
+          url: `/payments?contract_id=${targetId}`,
           message: '請前往繳費管理頁面處理款項'
         }
       },
 
       // ★ 2026-01-01 新增：導流到發票管理（invoice_pending 狀態使用）
+      // ★ 105 修正：優先使用 next_contract_id
       GO_TO_INVOICES: async (contractId, payload) => {
+        const targetId = payload?.next_contract_id || contractId
         return {
           success: true,
           action: 'navigate',
-          url: `/invoices?contract_id=${contractId}`,
+          url: `/invoices?contract_id=${targetId}`,
           message: '請前往發票管理頁面開立發票'
         }
       }

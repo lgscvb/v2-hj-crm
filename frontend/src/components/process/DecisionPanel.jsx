@@ -217,7 +217,12 @@ export default function DecisionPanel({
     setLoadingAction(actionKey)
 
     try {
-      const result = await executeAction(processKey, actionKey, entityId, payload)
+      // ★ 105 修正：自動傳遞 next_contract_id（如果 decision 有提供）
+      const enrichedPayload = {
+        ...payload,
+        next_contract_id: decision.next_contract_id || payload.next_contract_id
+      }
+      const result = await executeAction(processKey, actionKey, entityId, enrichedPayload)
 
       if (result.success) {
         // 處理導航行動（GO_TO_PAYMENTS, GO_TO_INVOICES 等）
