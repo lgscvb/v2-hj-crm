@@ -229,6 +229,17 @@ export const db = {
     return arr[0] || null
   },
 
+  // 確保當月應收已產生（冪等，可重複呼叫）
+  async ensureMonthlyPayments() {
+    try {
+      const data = await api.post('/api/db/rpc/generate_monthly_payments', {})
+      return data?.[0] || data
+    } catch (error) {
+      console.warn('ensureMonthlyPayments failed:', error)
+      return null
+    }
+  },
+
   // 今日待辦
   async getTodayTasks(params = {}) {
     const data = await api.get('/api/db/v_today_tasks', { params })
