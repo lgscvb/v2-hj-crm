@@ -15,7 +15,7 @@
 
 CREATE OR REPLACE FUNCTION activate_renewal(
     p_new_contract_id INT,
-    p_operator TEXT DEFAULT NULL
+    p_activated_by TEXT DEFAULT NULL
 ) RETURNS JSONB AS $$
 DECLARE
     v_new_contract RECORD;
@@ -122,7 +122,7 @@ BEGIN
     UPDATE renewal_operations
     SET status = 'activated',
         activated_at = NOW(),
-        activated_by = p_operator
+        activated_by = p_activated_by
     WHERE new_contract_id = p_new_contract_id
       AND status = 'draft';
 
