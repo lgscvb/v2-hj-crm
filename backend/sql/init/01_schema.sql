@@ -205,8 +205,9 @@ CREATE TABLE payments (
     -- 付款資訊
     payment_method  VARCHAR(30)
                     CHECK (payment_method IN ('cash', 'transfer', 'credit_card', 'line_pay', NULL)),
+    -- ★ 與 Migration 033 同步：pending=待繳, paid=已繳, overdue=逾期, waived=免收, cancelled=取消
     payment_status  VARCHAR(20) DEFAULT 'pending'
-                    CHECK (payment_status IN ('pending', 'paid', 'overdue', 'cancelled', 'refunded')),
+                    CHECK (payment_status IN ('pending', 'paid', 'overdue', 'waived', 'cancelled')),
 
     -- 日期
     due_date        DATE NOT NULL,
