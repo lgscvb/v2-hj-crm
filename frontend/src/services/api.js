@@ -229,13 +229,14 @@ export const db = {
     return arr[0] || null
   },
 
-  // 確保當月應收已產生（冪等，可重複呼叫）
-  async ensureMonthlyPayments() {
+  // 每日維護：產生應收、更新逾期、更新過期合約（冪等，可重複呼叫）
+  // ★ 2026-01-02：整合三個維護任務到單一函數
+  async runDailyMaintenance() {
     try {
-      const data = await api.post('/api/db/rpc/generate_monthly_payments', {})
+      const data = await api.post('/api/db/rpc/run_daily_maintenance', {})
       return data?.[0] || data
     } catch (error) {
-      console.warn('ensureMonthlyPayments failed:', error)
+      console.warn('runDailyMaintenance failed:', error)
       return null
     }
   },

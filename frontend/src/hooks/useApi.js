@@ -408,13 +408,13 @@ export function useBranchRevenue() {
 }
 
 // 儀表板統計（聚合所有場館，取代前端 reduce）
-// ★ 2026-01-02：載入時自動確保當月應收已產生
+// ★ 2026-01-02：載入時執行每日維護（產生應收、更新逾期、更新過期合約）
 export function useDashboardStats() {
   return useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
-      // 先確保當月應收已產生（冪等，可重複呼叫）
-      await db.ensureMonthlyPayments()
+      // 執行每日維護（冪等，可重複呼叫）
+      await db.runDailyMaintenance()
       const data = await db.getDashboardStats()
       return data
     }
