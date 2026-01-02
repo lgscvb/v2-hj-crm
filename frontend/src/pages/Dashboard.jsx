@@ -26,9 +26,6 @@ import {
 import { line } from '../services/api'
 import StatCard from '../components/StatCard'
 import Badge, { StatusBadge } from '../components/Badge'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-
-const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444']
 
 // ============================================================================
 // 續約 Checklist 相關：直接使用 v_renewal_reminders 的計算欄位
@@ -107,22 +104,6 @@ export default function Dashboard() {
   const outstandingCount = Number(dashboardStats?.outstanding_count) || 0
   const overdueAmount = Number(dashboardStats?.monthly_overdue) || 0
   const overdueCount = Number(dashboardStats?.overdue_count) || 0
-  const monthlyPending = Number(dashboardStats?.monthly_pending) || 0
-
-  // 圖表資料
-  const chartData = branchRevenueArr.map((b) => ({
-    name: b.branch_name,
-    營收: b.current_month_revenue || 0,
-    待收: b.current_month_pending || 0,
-    逾期: b.current_month_overdue || 0
-  }))
-
-  const pieData = [
-    { name: '已收款', value: received },
-    { name: '待收款', value: monthlyPending },
-    { name: '逾期', value: overdueAmount }
-  ].filter(d => d.value > 0)
-
   const priorityIcon = {
     urgent: '🔴',
     high: '🟠',
@@ -236,7 +217,7 @@ export default function Dashboard() {
           loading={statsLoading}
         />
         <StatCard
-          title="逾期金額"
+          title="逾期款項"
           value={`$${overdueAmount.toLocaleString()}`}
           subtitle={`共 ${overdueCount} 筆`}
           icon={AlertTriangle}
@@ -496,44 +477,8 @@ export default function Dashboard() {
         )
       })()}
 
-      {/* 圖表區與新增區塊 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 收款狀態圓餅圖 */}
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title">本月收款狀態</h3>
-          </div>
-          <div className="h-72">
-            {revenueLoading ? (
-              <div className="h-full flex items-center justify-center">
-                <div className="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full" />
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={90}
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    labelLine={false}
-                  >
-                    {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </div>
-
-        {/* 當月應催繳 */}
-        <div className="card lg:col-span-2">
+      {/* 當月應催繳 */}
+      <div className="card">
           <div className="card-header">
             <h3 className="card-title flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-orange-500" />
@@ -612,7 +557,6 @@ export default function Dashboard() {
               })
             )}
           </div>
-        </div>
       </div>
 
       {/* 逾期款項提醒 */}
