@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hour Jungle CRM v2 使用教學</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 60px;
+        }
+
+        header h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        header p {
+            font-size: 1.25rem;
+            opacity: 0.9;
+        }
+
+        .toc {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 60px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+        }
+
+        .toc h2 {
+            font-size: 1.5rem;
+            color: #333;
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .toc-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .toc a {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            text-decoration: none;
+            color: #333;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .toc a:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .toc a .icon {
+            font-size: 1.5rem;
+        }
+
+        .section {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .section-number {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 1.25rem;
+        }
+
+        .section h2 {
+            font-size: 1.75rem;
+            color: #333;
+        }
+
+        .section-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            align-items: start;
+        }
+
+        @media (max-width: 900px) {
+            .section-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .screenshot-container {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+        }
+
+        .screenshot-container img {
+            width: 100%;
+            display: block;
+        }
+
+        .screenshot-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+        }
+
+        .callout {
+            position: absolute;
+            background: #ff6b6b;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
+        }
+
+        .callout::before {
+            content: '';
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: #ff6b6b;
+            transform: rotate(45deg);
+        }
+
+        .callout.top-left::before {
+            bottom: -6px;
+            left: 20px;
+        }
+
+        .callout.top-right::before {
+            bottom: -6px;
+            right: 20px;
+        }
+
+        .description {
+            padding: 20px 0;
+        }
+
+        .description h3 {
+            font-size: 1.25rem;
+            color: #333;
+            margin-bottom: 16px;
+        }
+
+        .description p {
+            color: #666;
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feature-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+
+        .feature-list .check {
+            width: 24px;
+            height: 24px;
+            background: #10b981;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 0.75rem;
+            flex-shrink: 0;
+        }
+
+        .feature-list .text {
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .feature-list .text strong {
+            color: #667eea;
+        }
+
+        .tip-box {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .tip-box h4 {
+            color: #c44536;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tip-box p {
+            color: #7c2d12;
+            font-size: 0.95rem;
+            margin: 0;
+        }
+
+        .faq {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+        }
+
+        .faq h2 {
+            font-size: 1.75rem;
+            color: #333;
+            margin-bottom: 32px;
+            text-align: center;
+        }
+
+        .faq-item {
+            border: 1px solid #eee;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+
+        .faq-question {
+            background: #f8f9fa;
+            padding: 20px 24px;
+            font-weight: 600;
+            color: #333;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .faq-question:hover {
+            background: #eef;
+        }
+
+        .faq-answer {
+            padding: 20px 24px;
+            color: #666;
+            line-height: 1.8;
+            border-top: 1px solid #eee;
+        }
+
+        footer {
+            text-align: center;
+            color: white;
+            padding: 40px 0;
+            opacity: 0.8;
+        }
+
+        footer a {
+            color: white;
+        }
+
+        .workflow {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            margin: 30px 0;
+        }
+
+        .workflow-step {
+            background: white;
+            padding: 16px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            color: #333;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+
+        .workflow-arrow {
+            color: #667eea;
+            font-size: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Hour Jungle CRM v2</h1>
+            <p>系統使用教學 - 讓您快速上手！</p>
+        </header>
+
+        <!-- 目錄 -->
+        <div class="toc">
+            <h2>快速導覽</h2>
+            <div class="toc-grid">
+                <a href="#dashboard"><span class="icon">📊</span> Dashboard 首頁</a>
+                <a href="#contracts"><span class="icon">📄</span> 合約管理</a>
+                <a href="#renewals"><span class="icon">🔄</span> 續約管理</a>
+                <a href="#payments"><span class="icon">💰</span> 繳費管理</a>
+                <a href="#invoices"><span class="icon">🧾</span> 發票管理</a>
+                <a href="#customers"><span class="icon">👥</span> 客戶管理</a>
+                <a href="#faq"><span class="icon">❓</span> 常見問題</a>
+            </div>
+        </div>
+
+        <!-- 核心工作流程 -->
+        <div class="section">
+            <div class="section-header">
+                <div class="section-number">★</div>
+                <h2>核心工作流程</h2>
+            </div>
+            <p style="color: #666; margin-bottom: 20px;">記住這個流程，就能處理 90% 的日常工作：</p>
+            <div class="workflow">
+                <div class="workflow-step">📄 合約</div>
+                <div class="workflow-arrow">→</div>
+                <div class="workflow-step">🔄 續約</div>
+                <div class="workflow-arrow">→</div>
+                <div class="workflow-step">💰 繳費</div>
+                <div class="workflow-arrow">→</div>
+                <div class="workflow-step">🧾 發票</div>
+            </div>
+        </div>
+
+        <!-- Dashboard -->
+        <div class="section" id="dashboard">
+            <div class="section-header">
+                <div class="section-number">1</div>
+                <h2>Dashboard 首頁</h2>
+            </div>
+            <div class="section-content">
+                <div class="screenshot-container">
+                    <img src="tutorial-screenshots/01-dashboard.png" alt="Dashboard 首頁">
+                </div>
+                <div class="description">
+                    <h3>一眼掌握全局</h3>
+                    <p>登入後第一個看到的頁面，讓您快速了解今天需要處理什麼。</p>
+                    <ul class="feature-list">
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>統計卡片</strong> - 顯示待處理事項總數</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>到期提醒</strong> - 近期到期的合約</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>逾期繳費</strong> - 需要催繳的款項</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>快速導航</strong> - 點擊卡片直接跳轉</span>
+                        </li>
+                    </ul>
+                    <div class="tip-box">
+                        <h4>💡 小技巧</h4>
+                        <p>每天上班第一件事：看 Dashboard 的數字，優先處理紅色警告！</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 合約管理 -->
+        <div class="section" id="contracts">
+            <div class="section-header">
+                <div class="section-number">2</div>
+                <h2>合約管理</h2>
+            </div>
+            <div class="section-content">
+                <div class="screenshot-container">
+                    <img src="tutorial-screenshots/02-contracts.png" alt="合約管理">
+                </div>
+                <div class="description">
+                    <h3>管理所有合約</h3>
+                    <p>這裡可以查看、搜尋、新增所有合約資料。</p>
+                    <ul class="feature-list">
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>狀態篩選</strong> - 依狀態快速過濾（生效中/已到期/已續約）</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>搜尋功能</strong> - 輸入公司名稱或合約編號</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>新增合約</strong> - 右上角「新增」按鈕</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>合約詳情</strong> - 點擊任一筆查看完整資料</span>
+                        </li>
+                    </ul>
+                    <div class="tip-box">
+                        <h4>💡 新增合約流程</h4>
+                        <p>點擊「新增」→ 填寫客戶與合約資料 → 儲存後系統自動產生繳費記錄</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 續約管理 -->
+        <div class="section" id="renewals">
+            <div class="section-header">
+                <div class="section-number">3</div>
+                <h2>續約管理</h2>
+            </div>
+            <div class="section-content">
+                <div class="screenshot-container">
+                    <img src="tutorial-screenshots/03-renewals.png" alt="續約管理">
+                </div>
+                <div class="description">
+                    <h3>追蹤續約進度</h3>
+                    <p>這裡顯示所有即將到期的合約，方便您提前處理續約事宜。</p>
+                    <ul class="feature-list">
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>急件標籤</strong> - 7 天內到期的合約優先處理</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>進度追蹤</strong> - 待處理/進行中/已完成</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>建立續約</strong> - 一鍵帶入舊合約資料</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>已移交切換</strong> - 隱藏/顯示已完成交接的項目</span>
+                        </li>
+                    </ul>
+                    <div class="tip-box">
+                        <h4>💡 續約小技巧</h4>
+                        <p>建議在合約到期前 30 天開始聯繫客戶，系統會自動提醒！</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 繳費管理 -->
+        <div class="section" id="payments">
+            <div class="section-header">
+                <div class="section-number">4</div>
+                <h2>繳費管理</h2>
+            </div>
+            <div class="section-content">
+                <div class="screenshot-container">
+                    <img src="tutorial-screenshots/04-payments.png" alt="繳費管理">
+                </div>
+                <div class="description">
+                    <h3>管理所有款項</h3>
+                    <p>追蹤每筆款項的繳費狀態，處理催繳與收款記錄。</p>
+                    <ul class="feature-list">
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>狀態篩選</strong> - 待繳/已繳/逾期/已免收</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>記錄繳費</strong> - 選擇付款方式、填入金額</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>發送催繳</strong> - 一鍵發送 LINE 催繳通知</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>申請免收</strong> - 特殊情況可申請免除款項</span>
+                        </li>
+                    </ul>
+                    <div class="tip-box">
+                        <h4>💡 逾期處理</h4>
+                        <p>逾期款項會以紅色標示，建議優先處理超過 30 天的項目。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 發票管理 -->
+        <div class="section" id="invoices">
+            <div class="section-header">
+                <div class="section-number">5</div>
+                <h2>發票管理</h2>
+            </div>
+            <div class="section-content">
+                <div class="screenshot-container">
+                    <img src="tutorial-screenshots/05-invoices.png" alt="發票管理">
+                </div>
+                <div class="description">
+                    <h3>開立與管理發票</h3>
+                    <p>處理所有發票的開立、作廢與折讓。</p>
+                    <ul class="feature-list">
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>開立發票</strong> - 填入發票號碼與相關資訊</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>作廢發票</strong> - 輸入作廢原因即可</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>折讓處理</strong> - 部分退款時使用</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>發票查詢</strong> - 依日期、狀態、客戶搜尋</span>
+                        </li>
+                    </ul>
+                    <div class="tip-box">
+                        <h4>💡 發票小提醒</h4>
+                        <p>發票一經開立無法修改，請確認資料正確後再開立！</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 客戶管理 -->
+        <div class="section" id="customers">
+            <div class="section-header">
+                <div class="section-number">6</div>
+                <h2>客戶管理</h2>
+            </div>
+            <div class="section-content">
+                <div class="screenshot-container">
+                    <img src="tutorial-screenshots/06-customers.png" alt="客戶管理">
+                </div>
+                <div class="description">
+                    <h3>管理客戶資料</h3>
+                    <p>維護所有客戶的基本資料與聯絡資訊。</p>
+                    <ul class="feature-list">
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>客戶列表</strong> - 查看所有客戶</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>搜尋功能</strong> - 依公司名或聯絡人搜尋</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>編輯資料</strong> - 更新聯絡資訊</span>
+                        </li>
+                        <li>
+                            <span class="check">✓</span>
+                            <span class="text"><strong>合約連結</strong> - 查看客戶的所有合約</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 常見問題 -->
+        <div class="faq" id="faq">
+            <h2>常見問題 FAQ</h2>
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    Q：看不到資料怎麼辦？
+                </div>
+                <div class="faq-answer">
+                    請先重新整理頁面（按 F5 或 Cmd+R）。如果還是沒有資料，請確認網路連線，或聯繫系統管理員。
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    Q：如何處理續約合約？
+                </div>
+                <div class="faq-answer">
+                    進入「續約」頁面 → 找到要續約的合約 → 點擊「建立續約合約」→ 系統會自動帶入舊合約資料 → 修改新條款後儲存即可。
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    Q：記錄繳費後可以撤銷嗎？
+                </div>
+                <div class="faq-answer">
+                    可以！在繳費頁面找到該筆款項，點擊「撤銷付款」並輸入原因即可。但如果已經開立發票，需要先作廢發票。
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    Q：發票開錯怎麼辦？
+                </div>
+                <div class="faq-answer">
+                    在發票頁面找到該張發票，點擊「作廢」並輸入作廢原因。作廢後可以重新開立正確的發票。
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    Q：如何發送 LINE 催繳通知？
+                </div>
+                <div class="faq-answer">
+                    在繳費頁面找到逾期款項，點擊「發送催繳」按鈕，系統會自動透過 LINE 發送催繳訊息給客戶。
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    Q：「急件」是什麼意思？
+                </div>
+                <div class="faq-answer">
+                    「急件」表示合約將在 7 天內到期，需要優先處理。在續約頁面點擊「急件」按鈕可以快速篩選這些項目。
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Hour Jungle CRM v2 © 2026</p>
+            <p>系統網址：<a href="https://hj-v2.yourspce.org" target="_blank">https://hj-v2.yourspce.org</a></p>
+        </footer>
+    </div>
+</body>
+</html>

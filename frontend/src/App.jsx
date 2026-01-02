@@ -32,6 +32,7 @@ import ServicePlans from './pages/ServicePlans'
 import Terminations from './pages/Terminations'
 import ProcessDashboard from './pages/ProcessDashboard'
 import IntegrityAlerts from './pages/IntegrityAlerts'
+import Tutorial from './pages/Tutorial'
 
 function App() {
   return (
@@ -73,6 +74,7 @@ function App() {
         <Route path="floor-plan" element={<FloorPlan />} />
         <Route path="settings" element={<Settings />} />
         <Route path="settings/service-plans" element={<ServicePlans />} />
+        <Route path="tutorial" element={<Tutorial />} />
       </Route>
     </Routes>
   )
