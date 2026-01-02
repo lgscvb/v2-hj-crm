@@ -199,26 +199,39 @@ async def renewal_create_draft(
         return {"success": False, "error": str(e)}
 
     # 3. 驗證原合約狀態
-    if old_contract.get("status") not in ["active", "expired"]:
+    # ★ 2026-01-02 強化：renewed 狀態表示已有續約合約生效，不應再建立新草稿
+    old_status = old_contract.get("status")
+    if old_status == "renewed":
         return {
             "success": False,
-            "error": f"原合約狀態為 {old_contract.get('status')}，無法續約",
+            "error": "此合約已完成續約（狀態為 renewed），無法再建立新草稿",
+            "code": "ALREADY_RENEWED",
+            "current_status": old_status
+        }
+    if old_status not in ["active", "expired"]:
+        return {
+            "success": False,
+            "error": f"原合約狀態為 {old_status}，無法續約（僅允許 active 或 expired）",
             "code": "INVALID_STATUS"
         }
 
-    # 4. 檢查是否已有續約草稿（get-or-create 模式）
+    # 4. 檢查是否已有續約合約（get-or-create 模式）
+    # ★ 2026-01-02 強化：擴大檢查範圍，包含 signed 狀態
     existing_drafts = await postgrest_get("contracts", {
         "renewed_from_id": f"eq.{contract_id}",
-        "status": "in.(renewal_draft,pending_sign,active)"
+        "status": "in.(renewal_draft,pending_sign,signed,active)"
     })
     if existing_drafts:
         existing = existing_drafts[0]
-        if existing["status"] == "active":
+        existing_status = existing["status"]
+        # 已生效或已簽署：拒絕
+        if existing_status in ["active", "signed"]:
             return {
                 "success": False,
-                "error": "此合約已有生效的續約合約",
+                "error": f"此合約已有{'生效' if existing_status == 'active' else '已簽署'}的續約合約",
                 "code": "ALREADY_RENEWED",
-                "existing_contract_id": existing["id"]
+                "existing_contract_id": existing["id"],
+                "existing_status": existing_status
             }
         else:
             # ★ get-or-create：返回現有草稿，不報錯
