@@ -689,9 +689,15 @@ export default function Renewals() {
     const status = getDisplayStatus(r)
     // 三段視圖過濾：預設隱藏「已移交」（handoff）
     if (!showHandoff && r.renewal_stage === 'handoff') return false
-    // Checklist 進度過濾
+
+    // ★ 2026-01-02 修正：急件篩選邏輯
+    // 急件 = 7 天內到期且未完成（stage !== 'ready'）
+    if (statusFilter === 'urgent') {
+      return r.days_until_expiry <= 7 && status.stage !== 'ready'
+    }
+
+    // Checklist 進度過濾（pending, in_progress, completed）
     if (statusFilter !== 'all' && status.stage !== statusFilter) return false
-    if (statusFilter === 'urgent' && r.days_until_expiry > 7) return false
     if (branchFilter && r.branch_id !== parseInt(branchFilter)) return false
     return true
   })
