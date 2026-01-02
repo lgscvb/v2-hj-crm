@@ -98,9 +98,11 @@ export default function Invoices() {
       }
 
       if (branchFilter) params.branch_id = `eq.${branchFilter}`
-      // 發票狀態篩選
-      if (statusFilter === 'issued') params.invoice_number = 'not.is.null'
-      if (statusFilter === 'pending') params.invoice_number = 'is.null'
+      // ★ 2026-01-02 修正：使用 invoice_status 而非 invoice_number 來篩選
+      // issued = invoice_status 等於 'issued'
+      // pending = invoice_status 為空或等於 'pending'（未開立的情況）
+      if (statusFilter === 'issued') params.invoice_status = 'eq.issued'
+      if (statusFilter === 'pending') params.or = '(invoice_status.is.null,invoice_status.eq.pending)'
       if (dateRange.start) params.paid_at = `gte.${dateRange.start}`
       if (dateRange.end) {
         if (params.paid_at) {
@@ -297,7 +299,12 @@ export default function Invoices() {
       header: '狀態',
       accessor: 'invoice_status',
       cell: (row) => {
-        if (!row.invoice_number) {
+        // ★ 2026-01-02 修正：優先檢查 invoice_status，而非僅依賴 invoice_number
+        // 因為 invoice_mark_issued 可以不填發票號碼
+        if (row.invoice_status === 'issued') {
+          return <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-700">已開立</span>
+        }
+        if (!row.invoice_number && row.invoice_status !== 'issued') {
           return <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-600">待開立</span>
         }
         const status = INVOICE_STATUS[row.invoice_status] || { label: row.invoice_status, color: 'gray' }
@@ -314,7 +321,8 @@ export default function Invoices() {
       accessor: 'id',
       cell: (row) => (
         <div className="flex items-center gap-1">
-          {!row.invoice_number ? (
+          {/* ★ 2026-01-02 修正：同時檢查 invoice_status 和 invoice_number */}
+          {!row.invoice_number && row.invoice_status !== 'issued' ? (
             <>
               <button
                 onClick={(e) => {
