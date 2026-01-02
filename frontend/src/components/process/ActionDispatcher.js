@@ -70,10 +70,11 @@ const getActionHandler = (processKey, actionKey) => {
         })
       },
 
-      // 啟用合約
+      // 啟用合約（注意：這裡的 contractId 實際上是草稿合約的 ID）
+      // ★ 2026-01-02 修正：後端 renewal_activate 期望 draft_id 參數
       ACTIVATE: async (contractId, payload) => {
         return callTool('renewal_activate', {
-          contract_id: contractId
+          draft_id: contractId  // contractId 在此上下文中就是草稿合約 ID
         })
       },
 

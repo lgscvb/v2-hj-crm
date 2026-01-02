@@ -393,7 +393,9 @@ export const crm = {
         original_price: data.original_price || null,
         payment_cycle: data.payment_cycle || 'monthly',
         payment_day: data.payment_day || 8,
-        notes: data.notes || null
+        notes: data.notes || null,
+        // ★ 2026-01-02 修正：補傳續約來源 ID（SSOT 需要追蹤續約鏈）
+        renewed_from_id: data.renewed_from_id || null
       })
 
       // MCP 工具回傳格式
