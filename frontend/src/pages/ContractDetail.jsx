@@ -37,7 +37,9 @@ import {
   FileDown,
   RotateCcw,
   Plus,
-  Trash2
+  Trash2,
+  FilePlus,
+  PenTool
 } from 'lucide-react'
 
 // 分館資料（含法人資訊）
@@ -156,15 +158,41 @@ function ChecklistPopover({ contract, onUpdate, onSaveNotes, isUpdating, onClose
     setNotesChanged(false)
   }, [contract.renewal_notes])
 
-  // V3 設計：可手動更新的意願管理項目（只有 notified 和 confirmed）
+  // 意願管理項目（可手動勾選）
   const editableItems = [
     { key: 'notified', label: '已通知', icon: Bell, checked: flags.is_notified, timestamp: contract.renewal_notified_at },
     { key: 'confirmed', label: '已確認', icon: CheckCircle, checked: flags.is_confirmed, timestamp: contract.renewal_confirmed_at },
   ]
 
-  // V3 設計：唯讀顯示的財務狀態（SSOT，從 payment 計算）
-  // ★ 101 修正：無續約草稿時（null）顯示「不適用」
-  const readonlyItems = [
+  // 合約建立項目（唯讀，SSOT 從 contract 計算）
+  const contractItems = [
+    {
+      key: 'draft',
+      label: '已建草稿',
+      icon: FilePlus,
+      checked: flags.has_draft,
+      hint: flags.has_draft ? `#${contract.next_contract_id}` : '→ 建立續約'
+    },
+    {
+      key: 'sent',
+      label: '已送簽',
+      icon: Send,
+      checked: flags.is_sent_for_sign,
+      hint: flags.is_sent_for_sign ? '（已發送）' : '→ 發送簽署'
+    },
+    {
+      key: 'signed',
+      label: '已回簽',
+      icon: PenTool,
+      checked: flags.is_signed,
+      hint: flags.is_signed ? '（已簽約）' :
+        (contract.days_pending_sign > 7 ? `等待 ${contract.days_pending_sign} 天` : '→ 等待回簽')
+    },
+  ]
+
+  // 財務完成項目（唯讀，SSOT 從 payment/invoice 計算）
+  // ★ 無續約草稿時（null）顯示「不適用」
+  const financeItems = [
     {
       key: 'paid',
       label: '已收款',
@@ -173,6 +201,15 @@ function ChecklistPopover({ contract, onUpdate, onSaveNotes, isUpdating, onClose
       disabled: flags.is_paid === null,
       hint: flags.is_paid === null ? '（尚無續約草稿）' :
         (flags.is_paid ? '（付款管理）' : '→ 付款管理')
+    },
+    {
+      key: 'invoiced',
+      label: '已開票',
+      icon: FileText,
+      checked: flags.is_invoiced === true,
+      disabled: flags.is_invoiced === null,
+      hint: flags.is_invoiced === null ? '（尚無續約草稿）' :
+        (flags.is_invoiced ? '（發票系統）' : '→ 發票管理')
     },
   ]
 
@@ -200,7 +237,7 @@ function ChecklistPopover({ contract, onUpdate, onSaveNotes, isUpdating, onClose
 
   return (
     <div ref={popoverRef} className="absolute top-full left-0 mt-2 bg-white border rounded-lg shadow-lg z-50 p-3 min-w-[320px]">
-      <h4 className="font-medium text-gray-900 mb-3 pb-2 border-b">續約進度 Checklist</h4>
+      <h4 className="font-medium text-gray-900 mb-3 pb-2 border-b">續約進度 Checklist（7 步驟）</h4>
 
       {/* 意願管理（可勾選） */}
       <div className="space-y-2 mb-3">
@@ -230,11 +267,32 @@ function ChecklistPopover({ contract, onUpdate, onSaveNotes, isUpdating, onClose
         ))}
       </div>
 
-      {/* 財務狀態（唯讀顯示，SSOT） */}
+      {/* 合約建立（唯讀） */}
       <div className="pt-2 mt-2 border-t space-y-2">
-        <div className="text-xs text-gray-400 mb-1">財務狀態（唯讀）</div>
-        {readonlyItems.map(({ key, label, icon: Icon, checked, hint }) => (
+        <div className="text-xs text-gray-400 mb-1">合約建立（唯讀）</div>
+        {contractItems.map(({ key, label, icon: Icon, checked, hint }) => (
           <div key={key} className="flex items-center justify-between opacity-70">
+            <div className="flex items-center gap-2 flex-1">
+              <div className={`w-4 h-4 rounded border ${checked ? 'bg-green-500 border-green-500' : 'border-gray-300'} flex items-center justify-center`}>
+                {checked && <CheckCircle className="w-3 h-3 text-white" />}
+              </div>
+              <Icon className={`w-4 h-4 ${checked ? 'text-green-500' : 'text-gray-400'}`} />
+              <span className={`text-sm ${checked ? 'text-gray-900' : 'text-gray-500'}`}>
+                {label}
+              </span>
+              {hint && (
+                <span className="text-xs text-gray-400 ml-1">{hint}</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 財務完成（唯讀） */}
+      <div className="pt-2 mt-2 border-t space-y-2">
+        <div className="text-xs text-gray-400 mb-1">財務完成（唯讀）</div>
+        {financeItems.map(({ key, label, icon: Icon, checked, hint, disabled }) => (
+          <div key={key} className={`flex items-center justify-between ${disabled ? 'opacity-40' : 'opacity-70'}`}>
             <div className="flex items-center gap-2 flex-1">
               <div className={`w-4 h-4 rounded border ${checked ? 'bg-green-500 border-green-500' : 'border-gray-300'} flex items-center justify-center`}>
                 {checked && <CheckCircle className="w-3 h-3 text-white" />}
