@@ -135,9 +135,6 @@ export default function Dashboard() {
   // 當月應催繳列表（待繳 + 逾期）
   const currentMonthDue = Array.isArray(paymentsDue) ? paymentsDue : []
 
-  // 45天內到期的合約
-  const upcomingRenewals = Array.isArray(renewals) ? renewals.filter(r => r.days_until_expiry <= 45) : []
-
   return (
     <div className="space-y-6">
       {/* 自動通知開關 */}
@@ -618,65 +615,9 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* 續約通知與通知記錄 */}
+      {/* 逾期款項提醒 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 續約通知 */}
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title flex items-center gap-2">
-              <Bell className="w-5 h-5 text-orange-500" />
-              續約通知（45天內到期）
-            </h3>
-            <button
-              onClick={() => navigate('/renewals')}
-              className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1"
-            >
-              查看全部 <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="space-y-2 max-h-80 overflow-y-auto">
-            {upcomingRenewals.length === 0 ? (
-              <div className="py-8 text-center text-gray-500">
-                ✅ 無即將到期的合約
-              </div>
-            ) : (
-              upcomingRenewals.slice(0, 8).map((renewal, index) => {
-                const isUrgent = renewal.days_until_expiry <= 7
-                const status = getDisplayStatus(renewal)
-
-                return (
-                  <div
-                    key={renewal.contract_id || `renewal-${index}`}
-                    className={`flex items-center justify-between p-3 rounded-lg border ${
-                      isUrgent ? 'bg-red-50 border-red-100' : 'bg-amber-50 border-amber-100'
-                    }`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {renewal.company_name || renewal.customer_name}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {renewal.company_name ? renewal.customer_name + ' · ' : ''}{renewal.branch_name}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <Badge variant={isUrgent ? 'danger' : 'warning'}>
-                        {renewal.days_until_expiry <= 0
-                          ? '已到期'
-                          : `${renewal.days_until_expiry} 天後到期`}
-                      </Badge>
-                      <p className="text-xs text-gray-500 mt-1">
-                        進度 {status.progress}/7
-                      </p>
-                    </div>
-                  </div>
-                )
-              })
-            )}
-          </div>
-        </div>
-
-        {/* 逾期款項提醒 */}
+        {/* 逾期款項 */}
         <div className="card">
           <div className="card-header">
             <h3 className="card-title flex items-center gap-2">
