@@ -271,9 +271,15 @@ export default function Terminations() {
   }
 
   // 開啟詳情
-  const openDetail = (caseData) => {
+  const openDetail = async (caseData) => {
+    // 先顯示列表資料，再載入完整詳情（含 checklist）
     setSelectedCase(caseData)
     setShowDetailModal(true)
+    // 載入完整資料（包含 checklist JSONB）
+    const result = await callTool('termination_get_case', { case_id: caseData.id })
+    if (result.success) {
+      setSelectedCase(result.case)
+    }
   }
 
   // 表格欄位（使用 DataTable 組件期望的格式：accessor/header/cell）
