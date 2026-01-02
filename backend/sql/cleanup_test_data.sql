@@ -56,10 +56,10 @@ BEGIN
 
     v_payment_count := COALESCE(array_length(v_payment_ids, 1), 0);
 
-    -- 找出關聯發票
+    -- 找出關聯發票（invoices 用 contract_id 關聯）
     SELECT ARRAY_AGG(id) INTO v_invoice_ids
     FROM invoices
-    WHERE payment_id = ANY(v_payment_ids);
+    WHERE contract_id = ANY(v_contract_ids);
 
     v_invoice_count := COALESCE(array_length(v_invoice_ids, 1), 0);
 
@@ -159,8 +159,8 @@ BEGIN
 
     -- 4. 按順序刪除（遵守 FK 約束）
 
-    -- 4.1 刪除發票
-    DELETE FROM invoices WHERE payment_id = ANY(v_payment_ids);
+    -- 4.1 刪除發票（invoices 用 contract_id 關聯）
+    DELETE FROM invoices WHERE contract_id = ANY(v_contract_ids);
     GET DIAGNOSTICS v_deleted_invoices = ROW_COUNT;
 
     -- 4.2 刪除佣金記錄
