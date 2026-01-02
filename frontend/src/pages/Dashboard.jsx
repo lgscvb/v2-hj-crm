@@ -249,122 +249,145 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* 續約狀態統計 - 4 階段模式 */}
-      {renewals?.length > 0 && (() => {
-        // 計算各階段數量
-        const stageCounts = renewals.reduce((acc, r) => {
+      {/* 續約流程（合併版）- 6 階段一條龍 */}
+      {(renewals?.length > 0 || pendingSignContracts?.length > 0) && (() => {
+        // 從 renewals 計算前段流程
+        const renewalCounts = (renewals || []).reduce((acc, r) => {
           const status = getDisplayStatus(r)
-          acc[status.stage] = (acc[status.stage] || 0) + 1
           // 急件：7 天內到期且未完成
           if (r.days_until_expiry <= 7 && status.stage !== 'completed') {
             acc.urgent = (acc.urgent || 0) + 1
           }
+          // 待通知：尚未開始（completion_score = 0）
+          if (status.progress === 0) {
+            acc.need_notify = (acc.need_notify || 0) + 1
+          }
+          // 確認中：已通知但尚未建立新合約（completion_score 1-3）
+          else if (status.progress >= 1 && status.progress <= 3) {
+            acc.confirming = (acc.confirming || 0) + 1
+          }
+          // 已完成
+          if (status.stage === 'completed') {
+            acc.completed = (acc.completed || 0) + 1
+          }
           return acc
-        }, { pending: 0, in_progress: 0, completed: 0, urgent: 0 })
+        }, { urgent: 0, need_notify: 0, confirming: 0, completed: 0 })
 
-        return (
-          <div className="card cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/renewals')}>
-            <div className="card-header">
-              <h3 className="card-title flex items-center gap-2">
-                <Bell className="w-5 h-5 text-orange-500" />
-                續約追蹤（45天內到期）
-              </h3>
-              <Badge variant="warning">{renewals.length} 份</Badge>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {/* 急件 */}
-              <div className="bg-red-100 text-red-700 rounded-lg p-3 text-center relative">
-                <Zap className="w-4 h-4 absolute top-2 right-2 opacity-50" />
-                <div className="text-2xl font-bold">{stageCounts.urgent}</div>
-                <div className="text-xs">急件（7天內）</div>
-              </div>
-              {/* 待處理 */}
-              <div className="bg-gray-100 text-gray-700 rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold">{stageCounts.pending}</div>
-                <div className="text-xs">待處理</div>
-              </div>
-              {/* 進行中 */}
-              <div className="bg-blue-100 text-blue-700 rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold">{stageCounts.in_progress}</div>
-                <div className="text-xs">進行中</div>
-              </div>
-              {/* 已完成 */}
-              <div className="bg-green-100 text-green-700 rounded-lg p-3 text-center">
-                <div className="text-2xl font-bold">{stageCounts.completed}</div>
-                <div className="text-xs">已完成</div>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* 簽署流程隊列 */}
-      {pendingSignContracts?.length > 0 && (() => {
-        // 計算各狀態數量
-        const signingCounts = pendingSignContracts.reduce((acc, c) => {
+        // 從 pendingSignContracts 計算後段流程
+        const signingCounts = (pendingSignContracts || []).reduce((acc, c) => {
           if (c.status === 'renewal_draft' && !c.sent_for_sign_at) {
             acc.need_send = (acc.need_send || 0) + 1
-          } else if (c.status === 'pending_sign' && c.is_overdue) {
-            acc.overdue = (acc.overdue || 0) + 1
           } else if (c.status === 'pending_sign') {
             acc.waiting = (acc.waiting || 0) + 1
           } else if (c.status === 'signed') {
             acc.need_activate = (acc.need_activate || 0) + 1
           }
           return acc
-        }, { need_send: 0, waiting: 0, overdue: 0, need_activate: 0 })
+        }, { need_send: 0, waiting: 0, need_activate: 0 })
 
-        const totalActions = signingCounts.need_send + signingCounts.overdue + signingCounts.need_activate
+        // 計算待處理總數（不含已完成）
+        const totalPending = renewalCounts.urgent + renewalCounts.need_notify + renewalCounts.confirming +
+          signingCounts.need_send + signingCounts.waiting + signingCounts.need_activate
+        const totalContracts = (renewals?.length || 0)
 
         return (
-          <div className="card cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/contracts')}>
+          <div className="card">
             <div className="card-header">
               <h3 className="card-title flex items-center gap-2">
-                <PenTool className="w-5 h-5 text-purple-500" />
-                簽署流程待辦
+                <Bell className="w-5 h-5 text-orange-500" />
+                續約流程
               </h3>
-              {totalActions > 0 && <Badge variant="danger">{totalActions} 項待處理</Badge>}
+              <div className="flex gap-2">
+                {renewalCounts.urgent > 0 && (
+                  <Badge variant="danger">{renewalCounts.urgent} 急件</Badge>
+                )}
+                {totalPending > 0 && (
+                  <Badge variant="warning">{totalPending} 待處理</Badge>
+                )}
+                <Badge variant="secondary">{totalContracts} 份</Badge>
+              </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {/* 待送簽 */}
-              <div
-                className="bg-blue-100 text-blue-700 rounded-lg p-3 text-center cursor-pointer hover:bg-blue-200 transition-colors"
-                onClick={(e) => { e.stopPropagation(); navigate('/contracts?tab=pending') }}
-              >
-                <div className="text-2xl font-bold">{signingCounts.need_send}</div>
-                <div className="text-xs">待送簽</div>
-              </div>
-              {/* 等待回簽 */}
-              <div
-                className="bg-yellow-100 text-yellow-700 rounded-lg p-3 text-center cursor-pointer hover:bg-yellow-200 transition-colors"
-                onClick={(e) => { e.stopPropagation(); navigate('/contracts?tab=pending') }}
-              >
-                <div className="text-2xl font-bold">{signingCounts.waiting}</div>
-                <div className="text-xs">等待回簽</div>
-              </div>
-              {/* 回簽逾期 */}
+            {/* 6 階段流程 */}
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              {/* 1. 急件 */}
               <div
                 className={`rounded-lg p-3 text-center cursor-pointer transition-colors relative ${
-                  signingCounts.overdue > 0
+                  renewalCounts.urgent > 0
                     ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                    : 'bg-gray-100 text-gray-400'
+                    : 'bg-gray-50 text-gray-400'
                 }`}
-                onClick={(e) => { e.stopPropagation(); navigate('/contracts?tab=pending') }}
+                onClick={() => navigate('/renewals')}
               >
-                {signingCounts.overdue > 0 && (
-                  <AlertTriangle className="w-4 h-4 absolute top-2 right-2 opacity-50" />
+                {renewalCounts.urgent > 0 && (
+                  <Zap className="w-3 h-3 absolute top-1 right-1 opacity-50" />
                 )}
-                <div className="text-2xl font-bold">{signingCounts.overdue}</div>
-                <div className="text-xs">回簽逾期</div>
+                <div className="text-xl font-bold">{renewalCounts.urgent}</div>
+                <div className="text-xs">急件</div>
               </div>
-              {/* 待啟用 */}
+              {/* 2. 待通知 */}
               <div
-                className="bg-green-100 text-green-700 rounded-lg p-3 text-center cursor-pointer hover:bg-green-200 transition-colors"
-                onClick={(e) => { e.stopPropagation(); navigate('/contracts?tab=pending') }}
+                className={`rounded-lg p-3 text-center cursor-pointer transition-colors ${
+                  renewalCounts.need_notify > 0
+                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    : 'bg-gray-50 text-gray-400'
+                }`}
+                onClick={() => navigate('/renewals')}
               >
-                <div className="text-2xl font-bold">{signingCounts.need_activate}</div>
+                <div className="text-xl font-bold">{renewalCounts.need_notify}</div>
+                <div className="text-xs">待通知</div>
+              </div>
+              {/* 3. 確認中 */}
+              <div
+                className={`rounded-lg p-3 text-center cursor-pointer transition-colors ${
+                  renewalCounts.confirming > 0
+                    ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                    : 'bg-gray-50 text-gray-400'
+                }`}
+                onClick={() => navigate('/renewals')}
+              >
+                <div className="text-xl font-bold">{renewalCounts.confirming}</div>
+                <div className="text-xs">確認中</div>
+              </div>
+              {/* 4. 待簽約 */}
+              <div
+                className={`rounded-lg p-3 text-center cursor-pointer transition-colors ${
+                  signingCounts.need_send > 0
+                    ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                    : 'bg-gray-50 text-gray-400'
+                }`}
+                onClick={() => navigate('/contracts?tab=pending')}
+              >
+                <div className="text-xl font-bold">{signingCounts.need_send}</div>
+                <div className="text-xs">待簽約</div>
+              </div>
+              {/* 5. 待回簽 */}
+              <div
+                className={`rounded-lg p-3 text-center cursor-pointer transition-colors ${
+                  signingCounts.waiting > 0
+                    ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                    : 'bg-gray-50 text-gray-400'
+                }`}
+                onClick={() => navigate('/contracts?tab=pending')}
+              >
+                <div className="text-xl font-bold">{signingCounts.waiting}</div>
+                <div className="text-xs">待回簽</div>
+              </div>
+              {/* 6. 待啟用 */}
+              <div
+                className={`rounded-lg p-3 text-center cursor-pointer transition-colors ${
+                  signingCounts.need_activate > 0
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                    : 'bg-gray-50 text-gray-400'
+                }`}
+                onClick={() => navigate('/contracts?tab=pending')}
+              >
+                <div className="text-xl font-bold">{signingCounts.need_activate}</div>
                 <div className="text-xs">待啟用</div>
               </div>
+            </div>
+            {/* 流程指示 */}
+            <div className="mt-2 text-xs text-gray-400 text-center">
+              通知 → 確認意願 → 建立合約 → 發送簽署 → 回簽 → 啟用
             </div>
           </div>
         )
