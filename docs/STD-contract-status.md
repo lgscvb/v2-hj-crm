@@ -1,7 +1,7 @@
 # 合約狀態轉換圖 (State Transition Diagram)
 
-> Version: 1.0
-> Date: 2025-12-26
+> Version: 1.1
+> Date: 2026-01-02
 
 ---
 
@@ -11,11 +11,14 @@
 |------|------|---------|
 | `draft` | 草稿（新建合約用） | 不產生應收帳款 |
 | `renewal_draft` | 續約草稿 | 不產生應收帳款，不影響舊合約 |
+| `pending_sign` | 待簽署（已發送合約） | 不產生應收帳款 |
+| `signed` | 已簽待啟用 | 不產生應收帳款 |
 | `active` | 生效中 | 產生應收帳款 |
 | `expired` | 已到期 | 停止產生新應收 |
 | `renewed` | 已續約（被新合約取代） | 停止產生新應收 |
 | `pending_termination` | 解約中 | 產生應收但標記解約中 |
 | `terminated` | 已終止 | 停止產生新應收 |
+| `cancelled` | 已取消 | 不產生應收帳款 |
 
 ---
 
@@ -25,9 +28,16 @@
 stateDiagram-v2
     [*] --> draft: 建立新合約
 
-    draft --> active: 合約簽署
-    note right of draft: 新客戶簽約流程
+    draft --> pending_sign: 發送合約
+    draft --> cancelled: 取消
 
+    pending_sign --> signed: 客戶回簽
+    pending_sign --> cancelled: 取消
+
+    signed --> active: 啟用合約
+    note right of signed: 確認生效日後啟用
+
+    renewal_draft --> pending_sign: 發送續約合約
     renewal_draft --> active: activate_renewal()
     note right of renewal_draft
         ★ Transaction 保護
@@ -49,23 +59,29 @@ stateDiagram-v2
     renewed --> [*]
     expired --> [*]
     terminated --> [*]
+    cancelled --> [*]
 ```
 
 ---
 
 ## 合法狀態轉換矩陣
 
-| 從 \ 到 | draft | renewal_draft | active | expired | renewed | pending_termination | terminated |
-|---------|-------|---------------|--------|---------|---------|---------------------|------------|
-| `draft` | - | ❌ | ✅ 簽署 | ❌ | ❌ | ❌ | ❌ |
-| `renewal_draft` | ❌ | - | ✅ activate | ❌ | ❌ | ❌ | ✅ cancel |
-| `active` | ❌ | ❌ | - | ✅ 到期 | ✅ 續約* | ✅ 解約 | ❌ |
-| `expired` | ❌ | ❌ | ❌ | - | ❌ | ❌ | ❌ |
-| `renewed` | ❌ | ❌ | ❌ | ❌ | - | ❌ | ❌ |
-| `pending_termination` | ❌ | ❌ | ✅ 取消 | ❌ | ❌ | - | ✅ 完成 |
-| `terminated` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | - |
+| 從 \ 到 | pending_sign | signed | active | expired | renewed | pending_termination | terminated | cancelled |
+|---------|--------------|--------|--------|---------|---------|---------------------|------------|-----------|
+| `draft` | ✅ 發送 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ 取消 |
+| `renewal_draft` | ✅ 發送 | ❌ | ✅ 啟用* | ❌ | ❌ | ❌ | ❌ | ✅ 取消 |
+| `pending_sign` | - | ✅ 回簽 | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ 取消 |
+| `signed` | ❌ | - | ✅ 啟用 | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `active` | ❌ | ❌ | - | ✅ 到期 | ✅ 續約* | ✅ 解約 | ❌ | ❌ |
+| `expired` | ❌ | ❌ | ❌ | - | ❌ | ❌ | ❌ | ❌ |
+| `renewed` | ❌ | ❌ | ❌ | ❌ | - | ❌ | ❌ | ❌ |
+| `pending_termination` | ❌ | ❌ | ✅ 取消 | ❌ | ❌ | - | ✅ 完成 | ❌ |
+| `terminated` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | - | ❌ |
+| `cancelled` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | - |
 
-> *注意：`active → renewed` 必須透過 `activate_renewal()` Transaction，確保新合約同時變為 active
+> *注意：
+> - `renewal_draft → active` 必須透過 `activate_renewal()` Transaction，同時更新舊合約為 renewed
+> - `active → renewed` 不能直接轉換，必須透過新合約啟用時觸發
 
 ---
 
@@ -151,11 +167,14 @@ def activate_renewal(new_contract_id):
 |------|----------------------------------|
 | `draft` | ❌ 忽略 |
 | `renewal_draft` | ❌ 忽略 |
+| `pending_sign` | ❌ 忽略 |
+| `signed` | ❌ 忽略 |
 | `active` | ✅ 產生應收 |
 | `expired` | ❌ 忽略 |
 | `renewed` | ❌ 忽略 |
 | `pending_termination` | ⚠️ 視解約日期 |
 | `terminated` | ❌ 忽略 |
+| `cancelled` | ❌ 忽略 |
 
 ---
 

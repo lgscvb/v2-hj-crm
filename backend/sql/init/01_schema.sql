@@ -150,9 +150,12 @@ CREATE TABLE contracts (
                     CHECK (payment_cycle IN ('monthly', 'quarterly', 'semi_annual', 'annual', 'biennial')),
     payment_day     INTEGER DEFAULT 5 CHECK (payment_day BETWEEN 1 AND 31),
 
-    -- 狀態
+    -- 狀態（完整清單，與 docs/STD-contract-status.md 同步）
+    -- draft: 草稿, renewal_draft: 續約草稿, pending_sign: 待簽署, signed: 已簽待啟用
+    -- active: 生效中, expired: 已到期, renewed: 已續約
+    -- pending_termination: 解約中, terminated: 已終止, cancelled: 已取消
     status          VARCHAR(20) DEFAULT 'draft'
-                    CHECK (status IN ('draft', 'pending_sign', 'active', 'expired', 'terminated', 'cancelled')),
+                    CHECK (status IN ('draft', 'renewal_draft', 'pending_sign', 'signed', 'active', 'expired', 'renewed', 'pending_termination', 'terminated', 'cancelled')),
 
     -- 介紹人/佣金
     broker_name     VARCHAR(100),
