@@ -140,9 +140,20 @@ const getActionHandler = (processKey, actionKey) => {
         })
       },
 
-      // 記錄收款（使用 crm_record_payment）
-      // ★ 2025-01-01 修復：移除 paid_at/payment_reference，改用 notes
+      // 記錄收款
+      // ★ 2026-01-02 修正：優先使用 billing_record_payment（有 amount 驗證），否則 fallback 到 crm_record_payment
       RECORD_PAYMENT: async (paymentId, payload) => {
+        // 如果有傳入 amount，使用新版工具（有金額驗證 + 自動開票邏輯）
+        if (payload.amount !== undefined) {
+          return callTool('billing_record_payment', {
+            payment_id: paymentId,
+            payment_method: payload.payment_method,
+            amount: payload.amount,
+            payment_date: payload.payment_date || null,
+            notes: payload.notes || null
+          })
+        }
+        // 否則使用舊版工具（向下兼容）
         return callTool('crm_record_payment', {
           payment_id: paymentId,
           payment_method: payload.payment_method,
@@ -151,10 +162,12 @@ const getActionHandler = (processKey, actionKey) => {
       },
 
       // 申請免收
+      // ★ 2026-01-02 修正：後端要求 requested_by 參數
       REQUEST_WAIVE: async (paymentId, payload) => {
         return callTool('billing_request_waive', {
           payment_id: paymentId,
-          reason: payload.reason
+          reason: payload.reason,
+          requested_by: payload.requested_by || 'system'
         })
       },
 
